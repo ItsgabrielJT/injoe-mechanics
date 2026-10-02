@@ -105,3 +105,10 @@ class ListarVehiculosQuery:
     size: int = 10
     search: str | None = None
     cliente_id: int | None = None
+
+
+@dataclass(frozen=True)
+class AltaRapidaCommand:
+    placa: str
+    nombres: str | None = None
+    cliente_id: int | None = None

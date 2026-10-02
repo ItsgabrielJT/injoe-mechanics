@@ -1,0 +1,974 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Car, ChevronDown, Package, Plus, Trash2, Wrench, X } from "lucide-react";
+import type { Cliente, Vehiculo } from "@/modules/clientes/domain/entities";
+import { altaRapidaClienteVehiculo, listarClientes, listarVehiculos } from "@/modules/clientes/infrastructure/clientes-api";
+import {
+  TIPOS_IMPUESTO,
+  formatoPrecio,
+  precioVentaFinal,
+  type Bodega,
+  type CategoriaProducto,
+  type Existencia,
+  type Producto,
+  type TipoImpuesto,
+} from "@/modules/inventario/domain/entities";
+import { crearCategoria, crearProducto, listarExistencias } from "@/modules/inventario/infrastructure/inventario-api";
+import { BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
+import type { Proveedor } from "@/modules/proveedores/domain/entities";
+import { listarPreciosProducto, listarPreciosServicio } from "@/modules/proveedores/infrastructure/proveedores-api";
+import type { Servicio } from "@/modules/servicios/domain/entities";
+import { crearServicio } from "@/modules/servicios/infrastructure/servicios-api";
+import {
+  ahoraEcuadorIso,
+  type ItemOrdenInput,
+  type OrdenInput,
+  type OrdenTrabajo,
+  type Tecnico,
+} from "@/modules/ordenes-trabajo/domain/entities";
+import { Portal } from "@/shared/components/portal";
+import { Button } from "@/shared/components/ui/button";
+import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
+import { ApiError } from "@/shared/infrastructure/http/http-error";
+import { cn } from "@/shared/lib/utils";
+
+interface LineaDraft {
+  key: string;
+  tipo: "producto" | "servicio";
+  productoId: number | null;
+  servicioId: number | null;
+  proveedorId: number | null;
+  bodegaId: number | null;
+  descripcion: string;
+  codigo: string | null;
+  cantidad: string;
+  precioBase: string;
+  incluyeIva: boolean;
+  precioCompra: string;
+  aplicaIva: boolean;
+  tipoImpuesto: TipoImpuesto;
+  aplicaInventario: boolean;
+}
+
+interface Props {
+  abierto: boolean;
+  cargando?: boolean;
+  token: string;
+  orden?: OrdenTrabajo | null;
+  tecnicos: Tecnico[];
+  productos: Producto[];
+  servicios: Servicio[];
+  proveedores: Proveedor[];
+  bodegas: Bodega[];
+  categorias: CategoriaProducto[];
+  onCatalogoChange: () => Promise<void>;
+  onClose: () => void;
+  onSubmit: (body: OrdenInput) => Promise<void>;
+}
+
+function nuevaKey() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function lineaVacia(tipo: "producto" | "servicio"): LineaDraft {
+  return {
+    key: nuevaKey(),
+    tipo,
+    productoId: null,
+    servicioId: null,
+    proveedorId: null,
+    bodegaId: null,
+    descripcion: "",
+    codigo: null,
+    cantidad: "1",
+    precioBase: "",
+    incluyeIva: true,
+    precioCompra: "",
+    aplicaIva: true,
+    tipoImpuesto: "15",
+    aplicaInventario: tipo === "producto",
+  };
+}
+
+function isoALocal(iso?: string | null): string {
+  if (!iso) return "";
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}T${pad(fecha.getHours())}:${pad(fecha.getMinutes())}`;
+}
+
+function localAIso(valor: string): string | null {
+  if (!valor) return null;
+  const fecha = new Date(valor);
+  return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
+}
+
+function codigoProducto() {
+  return `PRD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+}
+
+function numero(valor: string | number | null | undefined): number {
+  if (valor === "" || valor == null) return 0;
+  const parsed = Number(valor);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function textoNumero(valor: number | string | null | undefined): string {
+  if (valor === "" || valor == null) return "";
+  const parsed = Number(valor);
+  if (Number.isNaN(parsed) || parsed === 0) return "";
+  return String(valor);
+}
+
+function InputImporte({
+  value,
+  onChange,
+  placeholder = "0.00",
+  className,
+}: {
+  value: string;
+  onChange: (valor: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      className={className}
+      value={value}
+      onChange={(event) => {
+        const siguiente = event.target.value.replace(",", ".").replace(/[^0-9.]/g, "");
+        const partes = siguiente.split(".");
+        const normalizado = partes.length > 2 ? `${partes[0]}.${partes.slice(1).join("")}` : siguiente;
+        onChange(normalizado);
+      }}
+    />
+  );
+}
+
+export function OrdenTrabajoFormDrawer({
+  abierto,
+  cargando,
+  token,
+  orden,
+  tecnicos,
+  productos,
+  servicios,
+  proveedores,
+  bodegas,
+  categorias,
+  onCatalogoChange,
+  onClose,
+  onSubmit,
+}: Props) {
+  const [clienteId, setClienteId] = useState<number | null>(null);
+  const [vehiculoId, setVehiculoId] = useState<number | null>(null);
+  const [clienteSel, setClienteSel] = useState<Cliente | null>(null);
+  const [vehiculoSel, setVehiculoSel] = useState<Vehiculo | null>(null);
+  const [tecnicoId, setTecnicoId] = useState<number | null>(null);
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaEntrega, setFechaEntrega] = useState("");
+  const [kilometraje, setKilometraje] = useState("");
+  const [notasGenerales, setNotasGenerales] = useState("");
+  const [notasTecnicas, setNotasTecnicas] = useState("");
+  const [lineas, setLineas] = useState<LineaDraft[]>([]);
+  const [busqueda, setBusqueda] = useState("");
+  const [resultados, setResultados] = useState<Vehiculo[]>([]);
+  const [clientesHallados, setClientesHallados] = useState<Cliente[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [altaNombre, setAltaNombre] = useState("");
+  const [altaPlaca, setAltaPlaca] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [existencias, setExistencias] = useState<Record<number, Existencia[]>>({});
+  const [altaProducto, setAltaProducto] = useState(false);
+  const [altaServicio, setAltaServicio] = useState(false);
+  const [nuevoProducto, setNuevoProducto] = useState({ nombre: "", precio: "", aplicaIva: true, tipo: "15" as TipoImpuesto, aplicaInventario: true });
+  const [nuevoServicio, setNuevoServicio] = useState({ nombre: "", precio: "", aplicaIva: true, tipo: "15" as TipoImpuesto });
+  const [creando, setCreando] = useState(false);
+  const [lineaActiva, setLineaActiva] = useState<string | null>(null);
+
+  const ordenId = orden?.id ?? null;
+
+  useEffect(() => {
+    if (!abierto) return;
+    setError(null);
+    setBusqueda("");
+    setResultados([]);
+    setClientesHallados([]);
+    setAltaNombre("");
+    setAltaPlaca("");
+    setAltaProducto(false);
+    setAltaServicio(false);
+    setLineaActiva(null);
+    if (orden) {
+      setClienteId(orden.clienteId);
+      setVehiculoId(orden.vehiculoId);
+      setClienteSel({
+        id: orden.clienteId,
+        empresaId: 0,
+        puntoEmisionId: 0,
+        identificacion: orden.clienteIdentificacion,
+        tipoCliente: "PERSONA_NATURAL",
+        nombres: orden.clienteNombres ?? "",
+        razonSocial: null,
+        fechaNacimiento: null,
+        provincia: null,
+        canton: null,
+        parroquia: null,
+        direcciones: [],
+        telefonos: [],
+        correos: [],
+        indiceDireccionPrincipal: null,
+        indiceTelefonoPrincipal: null,
+        indiceCorreoPrincipal: null,
+        direccionFiscal: null,
+        telefonoFiscal: null,
+        correoFiscal: null,
+        notas: null,
+        activo: true,
+        totalVehiculos: 1,
+        placas: [orden.vehiculoPlaca ?? ""],
+        correoPrincipal: null,
+      });
+      setVehiculoSel({
+        id: orden.vehiculoId,
+        empresaId: 0,
+        puntoEmisionId: 0,
+        clienteId: orden.clienteId,
+        placa: orden.vehiculoPlaca ?? "",
+        marca: orden.vehiculoMarca,
+        modelo: orden.vehiculoModelo,
+        anio: null,
+        tipo: null,
+        color: null,
+        combustible: null,
+        cilindrada: null,
+        transmision: null,
+        notas: null,
+        activo: true,
+        clienteNombres: orden.clienteNombres,
+        clienteIdentificacion: orden.clienteIdentificacion,
+      });
+      setTecnicoId(orden.tecnicoId);
+      setFechaInicio(isoALocal(orden.fechaInicio));
+      setFechaEntrega(isoALocal(orden.fechaEntrega));
+      setKilometraje(orden.kilometraje != null ? String(orden.kilometraje) : "");
+      setNotasGenerales(orden.notasGenerales ?? "");
+      setNotasTecnicas(orden.notasTecnicas ?? "");
+      const cargadas = orden.items.map((item) => ({
+        key: nuevaKey(),
+        tipo: (item.productoId ? "producto" : "servicio") as LineaDraft["tipo"],
+        productoId: item.productoId,
+        servicioId: item.servicioId,
+        proveedorId: item.proveedorId,
+        bodegaId: item.bodegaId,
+        descripcion: item.descripcion,
+        codigo: item.codigo,
+        cantidad: textoNumero(item.cantidad) || "1",
+        precioBase: textoNumero(item.precioVenta),
+        incluyeIva: true,
+        precioCompra: textoNumero(item.precioCompra),
+        aplicaIva: item.aplicaIva,
+        tipoImpuesto: item.tipoImpuesto,
+        aplicaInventario: item.productoId ? productos.find((p) => p.id === item.productoId)?.aplicaInventario ?? Boolean(item.bodegaId) : false,
+      }));
+      setLineas(cargadas);
+      setLineaActiva(cargadas[0]?.key ?? null);
+    } else {
+      setClienteId(null);
+      setVehiculoId(null);
+      setClienteSel(null);
+      setVehiculoSel(null);
+      setTecnicoId(tecnicos[0]?.id ?? null);
+      setFechaInicio(isoALocal(ahoraEcuadorIso()));
+      setFechaEntrega("");
+      setKilometraje("");
+      setNotasGenerales("");
+      setNotasTecnicas("");
+      setLineas([]);
+    }
+  }, [abierto, ordenId]);
+
+  useEffect(() => {
+    if (abierto && !tecnicoId && tecnicos[0]) {
+      setTecnicoId(tecnicos[0].id);
+    }
+    if (abierto && !fechaInicio) {
+      setFechaInicio(isoALocal(ahoraEcuadorIso()));
+    }
+  }, [abierto, fechaInicio, tecnicoId, tecnicos]);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const termino = busqueda.trim();
+    if (termino.length < 2) {
+      setResultados([]);
+      setClientesHallados([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const [vehiculos, clientes] = await Promise.all([
+          listarVehiculos(token, { page: 1, size: 20, search: termino }),
+          listarClientes(token, { page: 1, size: 10, search: termino }),
+        ]);
+        setResultados(vehiculos.data);
+        if (vehiculos.data.length === 1) {
+          seleccionarVehiculo(vehiculos.data[0]);
+          setClientesHallados([]);
+        } else if (vehiculos.data.length === 0) {
+          setClientesHallados(clientes.data);
+        } else {
+          setClientesHallados([]);
+        }
+      } catch {
+        setResultados([]);
+        setClientesHallados([]);
+      } finally {
+        setBuscando(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [abierto, busqueda, token]);
+
+  function seleccionarVehiculo(vehiculo: Vehiculo) {
+    setVehiculoSel(vehiculo);
+    setVehiculoId(vehiculo.id);
+    setClienteId(vehiculo.clienteId);
+    setClienteSel({
+      id: vehiculo.clienteId,
+      empresaId: vehiculo.empresaId,
+      puntoEmisionId: vehiculo.puntoEmisionId,
+      identificacion: vehiculo.clienteIdentificacion ?? null,
+      tipoCliente: "PERSONA_NATURAL",
+      nombres: vehiculo.clienteNombres ?? "",
+      razonSocial: null,
+      fechaNacimiento: null,
+      provincia: null,
+      canton: null,
+      parroquia: null,
+      direcciones: [],
+      telefonos: [],
+      correos: [],
+      indiceDireccionPrincipal: null,
+      indiceTelefonoPrincipal: null,
+      indiceCorreoPrincipal: null,
+      direccionFiscal: null,
+      telefonoFiscal: null,
+      correoFiscal: null,
+      notas: null,
+      activo: true,
+      totalVehiculos: 1,
+      placas: [vehiculo.placa],
+      correoPrincipal: null,
+    });
+    setBusqueda("");
+    setResultados([]);
+    setClientesHallados([]);
+  }
+
+  function seleccionarCliente(cliente: Cliente) {
+    setClienteSel(cliente);
+    setClienteId(cliente.id);
+    setVehiculoSel(null);
+    setVehiculoId(null);
+    setAltaNombre(cliente.nombres);
+    setBusqueda("");
+    setResultados([]);
+    setClientesHallados([]);
+  }
+
+  async function crearAltaRapida() {
+    setError(null);
+    setCreando(true);
+    try {
+      const body = clienteId
+        ? { cliente_id: clienteId, placa: altaPlaca.trim().toUpperCase() }
+        : { nombres: altaNombre.trim(), placa: altaPlaca.trim().toUpperCase() };
+      const creado = await altaRapidaClienteVehiculo(token, body);
+      seleccionarVehiculo({
+        ...creado.vehiculo,
+        clienteNombres: creado.cliente.nombres,
+        clienteIdentificacion: creado.cliente.identificacion,
+      });
+      setAltaNombre("");
+      setAltaPlaca("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear el cliente y el vehículo");
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  function actualizarLinea(key: string, cambios: Partial<LineaDraft>) {
+    setLineas((actuales) => actuales.map((linea) => (linea.key === key ? { ...linea, ...cambios } : linea)));
+  }
+
+  async function elegirProducto(linea: LineaDraft, productoId: number | null) {
+    if (!productoId) {
+      actualizarLinea(linea.key, { productoId: null, descripcion: "", codigo: null, aplicaInventario: true });
+      return;
+    }
+    const producto = productos.find((item) => item.id === productoId);
+    if (!producto) return;
+    actualizarLinea(linea.key, {
+      productoId,
+      servicioId: null,
+      descripcion: producto.nombre,
+      codigo: producto.codigo,
+      precioBase: textoNumero(producto.precioVenta),
+      incluyeIva: true,
+      aplicaIva: producto.aplicaIva,
+      tipoImpuesto: producto.tipoImpuesto,
+      aplicaInventario: producto.aplicaInventario,
+      bodegaId: producto.aplicaInventario ? linea.bodegaId : null,
+    });
+    if (producto.aplicaInventario && !existencias[producto.id]) {
+      const stock = await listarExistencias(token, producto.id);
+      setExistencias((actual) => ({ ...actual, [producto.id]: stock }));
+    }
+    const precios = await listarPreciosProducto(token, producto.id);
+    const principal = precios.find((item) => item.esPrincipal) ?? precios[0];
+    if (principal) {
+      actualizarLinea(linea.key, { proveedorId: principal.proveedorId, precioCompra: textoNumero(principal.precioCompra) });
+    }
+  }
+
+  async function elegirServicio(linea: LineaDraft, servicioId: number | null) {
+    if (!servicioId) {
+      actualizarLinea(linea.key, { servicioId: null, descripcion: "", codigo: null });
+      return;
+    }
+    const servicio = servicios.find((item) => item.id === servicioId);
+    if (!servicio) return;
+    actualizarLinea(linea.key, {
+      servicioId,
+      productoId: null,
+      descripcion: servicio.nombre,
+      codigo: servicio.codigo,
+      precioBase: textoNumero(servicio.precioVenta),
+      incluyeIva: true,
+      aplicaIva: servicio.aplicaIva,
+      tipoImpuesto: servicio.tipoImpuesto,
+      aplicaInventario: false,
+      bodegaId: null,
+    });
+    const precios = await listarPreciosServicio(token, servicio.id);
+    const principal = precios.find((item) => item.esPrincipal) ?? precios[0];
+    if (principal) {
+      actualizarLinea(linea.key, { proveedorId: principal.proveedorId, precioCompra: textoNumero(principal.precioCompra) });
+    }
+  }
+
+  function agregarLinea(tipo: "producto" | "servicio") {
+    const linea = lineaVacia(tipo);
+    setLineas((actual) => [...actual, linea]);
+    setLineaActiva(linea.key);
+    requestAnimationFrame(() => {
+      document.getElementById(`linea-ot-${linea.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function cerrarAltaProducto() {
+    setAltaProducto(false);
+    setNuevoProducto({ nombre: "", precio: "", aplicaIva: true, tipo: "15", aplicaInventario: true });
+  }
+
+  function cerrarAltaServicio() {
+    setAltaServicio(false);
+    setNuevoServicio({ nombre: "", precio: "", aplicaIva: true, tipo: "15" });
+  }
+
+  async function asegurarCategoriaGeneral(): Promise<number> {
+    const existente = categorias.find((item) => item.nombre.toLowerCase() === "general");
+    if (existente) return existente.id;
+    const creada = await crearCategoria(token, { nombre: "General", descripcion: "Categoría automática" });
+    await onCatalogoChange();
+    return creada.id;
+  }
+
+  async function crearProductoRapido() {
+    if (nuevoProducto.nombre.trim().length < 2 || Number(nuevoProducto.precio) <= 0) {
+      setError("El producto necesita nombre y precio");
+      return;
+    }
+    setCreando(true);
+    setError(null);
+    try {
+      const categoriaId = await asegurarCategoriaGeneral();
+      const precio = precioVentaFinal(Number(nuevoProducto.precio), true, nuevoProducto.tipo, nuevoProducto.aplicaIva);
+      const producto = await crearProducto(token, {
+        codigo: codigoProducto(),
+        nombre: nuevoProducto.nombre.trim(),
+        categoria_id: categoriaId,
+        precio_venta: precio,
+        tipo_impuesto: nuevoProducto.tipo,
+        aplica_iva: nuevoProducto.aplicaIva,
+        aplica_inventario: nuevoProducto.aplicaInventario,
+      });
+      await onCatalogoChange();
+      const linea = {
+        ...lineaVacia("producto"),
+        productoId: producto.id,
+        descripcion: producto.nombre,
+        codigo: producto.codigo,
+        precioBase: textoNumero(producto.precioVenta),
+        aplicaIva: producto.aplicaIva,
+        tipoImpuesto: producto.tipoImpuesto,
+        aplicaInventario: producto.aplicaInventario,
+      };
+      setLineas((actuales) => [...actuales, linea]);
+      setLineaActiva(linea.key);
+      cerrarAltaProducto();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear el producto");
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  async function crearServicioRapido() {
+    if (nuevoServicio.nombre.trim().length < 2 || Number(nuevoServicio.precio) <= 0) {
+      setError("El servicio necesita nombre y precio");
+      return;
+    }
+    setCreando(true);
+    setError(null);
+    try {
+      const precio = precioVentaFinal(Number(nuevoServicio.precio), true, nuevoServicio.tipo, nuevoServicio.aplicaIva);
+      const servicio = await crearServicio(token, {
+        nombre: nuevoServicio.nombre.trim(),
+        precio_venta: precio,
+        tipo_impuesto: nuevoServicio.tipo,
+        aplica_iva: nuevoServicio.aplicaIva,
+        categoria: "mantenimiento",
+      });
+      await onCatalogoChange();
+      const linea = {
+        ...lineaVacia("servicio"),
+        servicioId: servicio.id,
+        descripcion: servicio.nombre,
+        codigo: servicio.codigo,
+        precioBase: textoNumero(servicio.precioVenta),
+        aplicaIva: servicio.aplicaIva,
+        tipoImpuesto: servicio.tipoImpuesto,
+        aplicaInventario: false,
+      };
+      setLineas((actuales) => [...actuales, linea]);
+      setLineaActiva(linea.key);
+      cerrarAltaServicio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear el servicio");
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  const resumen = useMemo(() => {
+    return lineas.reduce(
+      (acc, linea) => {
+        const venta = precioVentaFinal(numero(linea.precioBase), linea.incluyeIva, linea.tipoImpuesto, linea.aplicaIva);
+        const total = venta * numero(linea.cantidad);
+        const costo = numero(linea.precioCompra) * numero(linea.cantidad);
+        acc.venta += total;
+        acc.costo += costo;
+        acc.utilidad += total - costo;
+        return acc;
+      },
+      { venta: 0, costo: 0, utilidad: 0 },
+    );
+  }, [lineas]);
+
+  async function enviar() {
+    setError(null);
+    if (!clienteId || !vehiculoId) {
+      setError("Selecciona o crea un cliente y un vehículo");
+      return;
+    }
+    if (!tecnicoId) {
+      setError("Selecciona un técnico");
+      return;
+    }
+    if (lineas.length === 0) {
+      setError("Agrega al menos un repuesto o servicio");
+      return;
+    }
+    for (const linea of lineas) {
+      if ((linea.tipo === "producto" && !linea.productoId) || (linea.tipo === "servicio" && !linea.servicioId)) {
+        setError("Cada línea debe tener un producto o servicio");
+        return;
+      }
+      if (linea.tipo === "producto" && linea.aplicaInventario && !linea.bodegaId) {
+        setError(`El producto ${linea.descripcion} requiere bodega`);
+        return;
+      }
+      if (numero(linea.cantidad) <= 0) {
+        setError("La cantidad debe ser mayor a 0");
+        return;
+      }
+    }
+    const items: ItemOrdenInput[] = lineas.map((linea) => ({
+      producto_id: linea.tipo === "producto" ? linea.productoId : null,
+      servicio_id: linea.tipo === "servicio" ? linea.servicioId : null,
+      proveedor_id: linea.proveedorId,
+      bodega_id: linea.aplicaInventario ? linea.bodegaId : null,
+      descripcion: linea.descripcion,
+      codigo: linea.codigo,
+      cantidad: numero(linea.cantidad),
+      precio_venta: precioVentaFinal(numero(linea.precioBase), linea.incluyeIva, linea.tipoImpuesto, linea.aplicaIva),
+      precio_compra: numero(linea.precioCompra),
+      aplica_iva: linea.aplicaIva,
+      tipo_impuesto: linea.tipoImpuesto,
+    }));
+    await onSubmit({
+      cliente_id: clienteId,
+      vehiculo_id: vehiculoId,
+      tecnico_id: tecnicoId,
+      fecha_inicio: localAIso(fechaInicio),
+      fecha_entrega: localAIso(fechaEntrega),
+      kilometraje: kilometraje === "" ? null : Number(kilometraje),
+      notas_generales: notasGenerales.trim() || null,
+      notas_tecnicas: notasTecnicas.trim() || null,
+      items,
+    });
+  }
+
+  if (!abierto) return null;
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-[70]">
+        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+        <aside className="absolute inset-y-0 right-0 w-full max-w-full sm:max-w-4xl bg-card shadow-elegant flex flex-col">
+          <div className="shrink-0 border-b bg-card flex items-start justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-semibold truncate">{orden ? `Editar ${orden.numero}` : "Nueva orden de trabajo"}</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground">Busca placa o cliente. Si no existe, crea solo con nombre y placa.</p>
+            </div>
+            <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose}><X className="h-5 w-5" /></Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+            {error && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 mt-0.5" /> {error}
+              </div>
+            )}
+
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">Cliente y vehículo</h3>
+              {vehiculoSel && clienteSel ? (
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 rounded-lg border bg-muted/20 p-3 sm:p-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Car className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium break-words">{vehiculoSel.placa} · {clienteSel.nombres}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {[vehiculoSel.marca, vehiculoSel.modelo].filter(Boolean).join(" ") || "Vehículo sin ficha completa"}
+                        {clienteSel.identificacion ? ` · ${clienteSel.identificacion}` : " · Cédula pendiente"}
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" className="w-full sm:w-auto shrink-0" onClick={() => { setVehiculoSel(null); setClienteSel(null); setClienteId(null); setVehiculoId(null); }}>Cambiar</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Buscar placa, marca, modelo, cliente o cédula</Label>
+                    <Input value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="ABC-1234 o Juan Pérez" />
+                    {buscando && <p className="text-xs text-muted-foreground">Buscando...</p>}
+                    {resultados.length > 1 && (
+                      <ul className="rounded-md border bg-card divide-y">
+                        {resultados.map((item) => (
+                          <li key={item.id}>
+                            <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10" onClick={() => seleccionarVehiculo(item)}>
+                              <span className="font-medium">{item.placa}</span>
+                              <span className="text-muted-foreground"> · {[item.marca, item.modelo].filter(Boolean).join(" ") || "Sin marca"} · {item.clienteNombres ?? "Cliente"}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {resultados.length === 0 && clientesHallados.length > 0 && (
+                      <ul className="rounded-md border bg-card divide-y">
+                        {clientesHallados.map((item) => (
+                          <li key={item.id}>
+                            <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10" onClick={() => seleccionarCliente(item)}>
+                              <span className="font-medium">{item.nombres}</span>
+                              <span className="text-muted-foreground"> · {item.identificacion || "Cédula pendiente"} · asociar nueva placa</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  {clienteSel && !vehiculoSel && (
+                    <p className="text-sm rounded-md border bg-muted/20 px-3 py-2">
+                      Cliente seleccionado: <span className="font-medium">{clienteSel.nombres}</span>. Ingresa solo la placa.
+                    </p>
+                  )}
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <p className="text-sm font-medium">Alta rápida para lanzar la orden</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label>Nombre del cliente</Label>
+                        <Input value={altaNombre} onChange={(event) => setAltaNombre(event.target.value)} placeholder="Juan Pérez" disabled={Boolean(clienteId)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Placa</Label>
+                        <Input value={altaPlaca} onChange={(event) => setAltaPlaca(event.target.value.toUpperCase())} placeholder="ABC-1234" />
+                      </div>
+                    </div>
+                    <Button type="button" variant="outline" disabled={creando || !altaPlaca.trim() || (!clienteId && altaNombre.trim().length < 2)} onClick={() => void crearAltaRapida()}>
+                      Crear y seleccionar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </section>
+
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">Cabecera</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Técnico *</Label>
+                  <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm bg-background" value={tecnicoId ?? ""} onChange={(event) => setTecnicoId(event.target.value ? Number(event.target.value) : null)}>
+                    <option value="">Selecciona</option>
+                    {tecnicos.map((item) => <option key={item.id} value={item.id}>{item.nombreCompleto}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Kilometraje</Label>
+                  <InputImporte value={kilometraje} onChange={setKilometraje} placeholder="Opcional" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Fecha de inicio</Label>
+                  <Input type="datetime-local" value={fechaInicio} onChange={(event) => setFechaInicio(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Fecha de entrega</Label>
+                  <Input type="datetime-local" value={fechaEntrega} onChange={(event) => setFechaEntrega(event.target.value)} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Notas generales</Label>
+                  <textarea className="flex min-h-20 w-full rounded-md border border-input px-3 py-2 text-sm" value={notasGenerales} onChange={(event) => setNotasGenerales(event.target.value)} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Notas técnicas</Label>
+                  <textarea className="flex min-h-20 w-full rounded-md border border-input px-3 py-2 text-sm" value={notasTecnicas} onChange={(event) => setNotasTecnicas(event.target.value)} />
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">Repuestos y servicios</h3>
+                  <p className="text-xs text-muted-foreground">{lineas.length === 0 ? "Sin ítems" : `${lineas.length} ítem${lineas.length === 1 ? "" : "s"}`}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => agregarLinea("producto")}><Plus className="h-4 w-4 mr-1" /> Producto</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => agregarLinea("servicio")}><Plus className="h-4 w-4 mr-1" /> Servicio</Button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setAltaServicio(false); setAltaProducto((v) => !v); }}>El repuesto no existe</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setAltaProducto(false); setAltaServicio((v) => !v); }}>El servicio no existe</Button>
+              </div>
+
+              {altaProducto && (
+                <div className="rounded-lg border p-3 sm:p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium">Nuevo producto</p>
+                    <Button type="button" variant="ghost" size="icon" onClick={cerrarAltaProducto} aria-label="Cerrar alta de producto"><X className="h-4 w-4" /></Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input placeholder="Nombre del producto" value={nuevoProducto.nombre} onChange={(event) => setNuevoProducto((v) => ({ ...v, nombre: event.target.value }))} />
+                    <InputImporte value={nuevoProducto.precio} onChange={(valor) => setNuevoProducto((v) => ({ ...v, precio: valor }))} placeholder="Precio" />
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={nuevoProducto.aplicaIva} onChange={(event) => setNuevoProducto((v) => ({ ...v, aplicaIva: event.target.checked }))} /> Aplica IVA</label>
+                    <select className="flex h-10 rounded-md border border-input px-3 text-sm bg-background" value={nuevoProducto.tipo} onChange={(event) => setNuevoProducto((v) => ({ ...v, tipo: event.target.value as TipoImpuesto }))}>
+                      {TIPOS_IMPUESTO.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                    <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={nuevoProducto.aplicaInventario} onChange={(event) => setNuevoProducto((v) => ({ ...v, aplicaInventario: event.target.checked }))} /> Aplica inventario</label>
+                  </div>
+                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={cerrarAltaProducto}>Cerrar</Button>
+                    <Button type="button" disabled={creando} onClick={() => void crearProductoRapido()}>Crear y usar</Button>
+                  </div>
+                </div>
+              )}
+
+              {altaServicio && (
+                <div className="rounded-lg border p-3 sm:p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium">Nuevo servicio</p>
+                    <Button type="button" variant="ghost" size="icon" onClick={cerrarAltaServicio} aria-label="Cerrar alta de servicio"><X className="h-4 w-4" /></Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input placeholder="Nombre del servicio" value={nuevoServicio.nombre} onChange={(event) => setNuevoServicio((v) => ({ ...v, nombre: event.target.value }))} />
+                    <InputImporte value={nuevoServicio.precio} onChange={(valor) => setNuevoServicio((v) => ({ ...v, precio: valor }))} placeholder="Precio" />
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={nuevoServicio.aplicaIva} onChange={(event) => setNuevoServicio((v) => ({ ...v, aplicaIva: event.target.checked }))} /> Aplica IVA</label>
+                    <select className="flex h-10 rounded-md border border-input px-3 text-sm bg-background" value={nuevoServicio.tipo} onChange={(event) => setNuevoServicio((v) => ({ ...v, tipo: event.target.value as TipoImpuesto }))}>
+                      {TIPOS_IMPUESTO.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={cerrarAltaServicio}>Cerrar</Button>
+                    <Button type="button" disabled={creando} onClick={() => void crearServicioRapido()}>Crear y usar</Button>
+                  </div>
+                </div>
+              )}
+
+              {lineas.length > 1 && (
+                <div className="sticky top-0 z-10 -mx-1 flex gap-2 overflow-x-auto bg-card/95 px-1 py-2 backdrop-blur">
+                  {lineas.map((linea, indice) => {
+                    const activa = lineaActiva === linea.key;
+                    return (
+                      <button
+                        key={`nav-${linea.key}`}
+                        type="button"
+                        className={cn(
+                          "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium max-w-[12rem] truncate",
+                          activa ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-primary/10",
+                        )}
+                        onClick={() => {
+                          setLineaActiva(linea.key);
+                          document.getElementById(`linea-ot-${linea.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      >
+                        {indice + 1}. {linea.descripcion || (linea.tipo === "producto" ? "Producto" : "Servicio")}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {lineas.map((linea, indice) => {
+                  const venta = precioVentaFinal(numero(linea.precioBase), linea.incluyeIva, linea.tipoImpuesto, linea.aplicaIva);
+                  const utilidad = venta * numero(linea.cantidad) - numero(linea.precioCompra) * numero(linea.cantidad);
+                  const stock = linea.productoId ? existencias[linea.productoId] ?? [] : [];
+                  const abierta = lineaActiva === linea.key;
+                  const Icono = linea.tipo === "producto" ? Package : Wrench;
+                  return (
+                    <div key={linea.key} id={`linea-ot-${linea.key}`} className="rounded-lg border scroll-mt-4">
+                      <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5">
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          onClick={() => setLineaActiva(abierta ? null : linea.key)}
+                        >
+                          <Icono className="h-4 w-4 shrink-0 text-primary" />
+                          <span className="text-xs text-muted-foreground shrink-0">{indice + 1}.</span>
+                          <span className="truncate text-sm font-medium">{linea.descripcion || (linea.tipo === "producto" ? "Producto" : "Servicio")}</span>
+                          <span className="hidden sm:inline truncate text-xs text-muted-foreground">{formatoPrecio(venta * numero(linea.cantidad))} · {formatoPrecio(utilidad)}</span>
+                          <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform ml-auto", abierta && "rotate-180")} />
+                        </button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="shrink-0"
+                          onClick={() => {
+                            setLineas((actual) => actual.filter((item) => item.key !== linea.key));
+                            if (lineaActiva === linea.key) setLineaActiva(null);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {abierta && (
+                        <div className="border-t p-3 sm:p-4 space-y-3">
+                          <p className="sm:hidden text-xs text-muted-foreground">Final {formatoPrecio(venta)} · Utilidad {formatoPrecio(utilidad)}</p>
+                          {linea.tipo === "producto" ? (
+                            <BuscadorSelect
+                              opciones={productos.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}`, extra: formatoPrecio(item.precioVenta) }))}
+                              valor={linea.productoId}
+                              onChange={(id) => void elegirProducto(linea, id)}
+                              placeholder="Buscar producto"
+                            />
+                          ) : (
+                            <BuscadorSelect
+                              opciones={servicios.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}`, extra: formatoPrecio(item.precioVenta) }))}
+                              valor={linea.servicioId}
+                              onChange={(id) => void elegirServicio(linea, id)}
+                              placeholder="Buscar servicio"
+                            />
+                          )}
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <div className="space-y-1">
+                              <Label>Cantidad</Label>
+                              <InputImporte value={linea.cantidad} onChange={(valor) => actualizarLinea(linea.key, { cantidad: valor })} placeholder="1" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label>Precio venta</Label>
+                              <InputImporte value={linea.precioBase} onChange={(valor) => actualizarLinea(linea.key, { precioBase: valor })} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label>Costo proveedor</Label>
+                              <InputImporte value={linea.precioCompra} onChange={(valor) => actualizarLinea(linea.key, { precioCompra: valor })} />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 text-sm">
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={linea.incluyeIva} onChange={(event) => actualizarLinea(linea.key, { incluyeIva: event.target.checked })} /> Incluye IVA</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={linea.aplicaIva} onChange={(event) => actualizarLinea(linea.key, { aplicaIva: event.target.checked })} /> Aplica IVA</label>
+                            <select className="h-9 rounded-md border border-input px-2 text-sm bg-background" value={linea.tipoImpuesto} onChange={(event) => actualizarLinea(linea.key, { tipoImpuesto: event.target.value as TipoImpuesto })}>
+                              {TIPOS_IMPUESTO.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                            </select>
+                            <span className="text-muted-foreground">Final {formatoPrecio(venta)} · Utilidad {formatoPrecio(utilidad)}</span>
+                          </div>
+                          <div className={cn("grid gap-3", linea.aplicaInventario ? "sm:grid-cols-2" : "")}>
+                            <div className="space-y-1">
+                              <Label>Proveedor</Label>
+                              <BuscadorSelect
+                                opciones={proveedores.map((item) => ({ id: item.id, label: item.nombres, extra: item.identificacion }))}
+                                valor={linea.proveedorId}
+                                onChange={(id) => actualizarLinea(linea.key, { proveedorId: id })}
+                                placeholder="Opcional"
+                              />
+                            </div>
+                            {linea.aplicaInventario && (
+                              <div className="space-y-1">
+                                <Label>Bodega *</Label>
+                                <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm bg-background" value={linea.bodegaId ?? ""} onChange={(event) => actualizarLinea(linea.key, { bodegaId: event.target.value ? Number(event.target.value) : null })}>
+                                  <option value="">Selecciona</option>
+                                  {bodegas.map((item) => {
+                                    const qty = stock.find((s) => s.bodegaId === item.id)?.cantidad;
+                                    return <option key={item.id} value={item.id}>{item.nombre}{qty != null ? ` (${qty})` : ""}</option>;
+                                  })}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+
+          <div className="shrink-0 border-t bg-card px-4 sm:px-6 py-3 space-y-3">
+            <div className="flex flex-wrap justify-between sm:justify-end gap-x-6 gap-y-1 text-sm">
+              <div><span className="text-muted-foreground">Venta </span><span className="font-semibold">{formatoPrecio(resumen.venta)}</span></div>
+              <div><span className="text-muted-foreground">Costo </span><span className="font-semibold">{formatoPrecio(resumen.costo)}</span></div>
+              <div><span className="text-muted-foreground">Utilidad </span><span className="font-semibold">{formatoPrecio(resumen.utilidad)}</span></div>
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose}>Cancelar</Button>
+              <Button type="button" className="w-full sm:w-auto" disabled={cargando} onClick={() => void enviar()}>{cargando ? "Guardando..." : "Guardar orden"}</Button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </Portal>
+  );
+}

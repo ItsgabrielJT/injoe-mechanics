@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.modules.clientes.application.dto import ContextoTenant
+from app.modules.clientes.application.use_cases.alta_rapida import AltaRapidaClienteVehiculoUseCase
 from app.modules.clientes.application.use_cases.actualizar_cliente import ActualizarClienteUseCase
 from app.modules.clientes.application.use_cases.actualizar_vehiculo import ActualizarVehiculoUseCase
 from app.modules.clientes.application.use_cases.crear_cliente import CrearClienteUseCase
@@ -15,6 +16,7 @@ from app.modules.clientes.application.use_cases.obtener_cliente import ObtenerCl
 from app.modules.clientes.application.use_cases.obtener_vehiculo import ObtenerVehiculoUseCase
 from app.modules.clientes.domain.entities import TipoCliente
 from app.modules.clientes.presentation.api.dependencies import (
+    get_alta_rapida_use_case,
     get_actualizar_cliente_use_case,
     get_actualizar_vehiculo_use_case,
     get_crear_cliente_use_case,
@@ -29,6 +31,8 @@ from app.modules.clientes.presentation.api.dependencies import (
     get_tenant,
 )
 from app.modules.clientes.presentation.api.schemas import (
+    AltaRapidaRequest,
+    AltaRapidaResponse,
     ClienteCreateRequest,
     ClienteListResponse,
     ClienteResponse,
@@ -66,6 +70,22 @@ async def listar_clientes(
         page=page,
         size=size,
         pages=pages,
+    )
+
+
+@clientes_router.post("/alta-rapida", response_model=AltaRapidaResponse, status_code=status.HTTP_201_CREATED)
+async def alta_rapida(
+    request: AltaRapidaRequest,
+    tenant: Annotated[ContextoTenant, Depends(get_tenant)],
+    use_case: Annotated[AltaRapidaClienteVehiculoUseCase, Depends(get_alta_rapida_use_case)],
+) -> AltaRapidaResponse:
+    cliente, vehiculo = await use_case.execute(request.to_command(), tenant)
+    return AltaRapidaResponse(
+        data={
+            "cliente": ClienteResponse.from_domain(cliente).model_dump(mode="json"),
+            "vehiculo": VehiculoResponse.from_domain(vehiculo).model_dump(mode="json"),
+        },
+        message="Cliente y vehículo listos para la orden",
     )
 
 

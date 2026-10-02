@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.modules.acceso.presentation.api.router import router as auth_router
+from app.modules.acceso.presentation.api.router import usuarios_router
 from app.modules.clientes.domain.exceptions import (
     ClienteNoEncontrado,
     CorreoRequerido,
@@ -46,6 +47,7 @@ from app.modules.inventario.domain.exceptions import (
     PrecioInvalido as InventarioPrecioInvalido,
     ProductoNoEncontrado,
     RecursoEnUso,
+    ProductoSinInventario,
     StockInsuficiente,
     TipoAjusteRequerido,
     TipoImpuestoRequerido as InventarioTipoImpuestoRequerido,
@@ -56,6 +58,34 @@ from app.modules.inventario.presentation.api.router import (
     categorias_router,
     movimientos_router,
     productos_router,
+)
+from app.modules.ordenes_trabajo.domain.exceptions import (
+    BodegaRequerida,
+    ItemInvalido,
+    OrdenCerrada,
+    OrdenNoEncontrada,
+    ProveedorRequerido,
+    TecnicoNoEncontrado,
+    VehiculoNoPertenece,
+)
+from app.modules.ordenes_trabajo.infrastructure.persistence import models as ordenes_models  # noqa: F401
+from app.modules.ordenes_trabajo.presentation.api.router import ordenes_router
+from app.modules.proveedores.domain.exceptions import (
+    IdentificacionDuplicada as ProveedorIdentificacionDuplicada,
+    IdentificacionInvalida as ProveedorIdentificacionInvalida,
+    IdentificacionRequerida,
+    NombreRequerido as ProveedorNombreRequerido,
+    PrecioCompraInvalido,
+    ProveedorNoEncontrado,
+    RecursoEnUso as ProveedorEnUso,
+    RelacionDuplicada,
+    RelacionNoEncontrada,
+)
+from app.modules.proveedores.infrastructure.persistence import models as proveedores_models  # noqa: F401
+from app.modules.proveedores.presentation.api.router import (
+    producto_precios_router,
+    proveedores_router,
+    servicio_precios_router,
 )
 from app.modules.servicios.infrastructure.persistence import models as servicios_models  # noqa: F401
 from app.modules.servicios.presentation.api.router import servicios_router
@@ -126,6 +156,23 @@ CODIGOS_HTTP = {
     BodegaDestinoRequerida: 400,
     TipoAjusteRequerido: 400,
     ItemsRequeridos: 400,
+    ProductoSinInventario: 400,
+    ProveedorNoEncontrado: 404,
+    ProveedorIdentificacionDuplicada: 409,
+    ProveedorIdentificacionInvalida: 400,
+    IdentificacionRequerida: 400,
+    ProveedorNombreRequerido: 400,
+    PrecioCompraInvalido: 400,
+    RelacionNoEncontrada: 404,
+    RelacionDuplicada: 409,
+    ProveedorEnUso: 409,
+    OrdenNoEncontrada: 404,
+    OrdenCerrada: 409,
+    TecnicoNoEncontrado: 400,
+    VehiculoNoPertenece: 400,
+    ItemInvalido: 400,
+    BodegaRequerida: 400,
+    ProveedorRequerido: 400,
 }
 
 
@@ -145,6 +192,11 @@ app.include_router(categorias_router, prefix=settings.API_V1_STR)
 app.include_router(bodegas_router, prefix=settings.API_V1_STR)
 app.include_router(productos_router, prefix=settings.API_V1_STR)
 app.include_router(movimientos_router, prefix=settings.API_V1_STR)
+app.include_router(proveedores_router, prefix=settings.API_V1_STR)
+app.include_router(producto_precios_router, prefix=settings.API_V1_STR)
+app.include_router(servicio_precios_router, prefix=settings.API_V1_STR)
+app.include_router(ordenes_router, prefix=settings.API_V1_STR)
+app.include_router(usuarios_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/salud")

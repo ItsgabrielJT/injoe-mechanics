@@ -91,6 +91,30 @@ class SqlAlchemyUsuarioRepository:
         modelo.ultimo_acceso = datetime.now(timezone.utc)
         await self.session.commit()
 
+    async def listar_por_punto(self, empresa_id: int, punto_emision_id: int) -> list[Usuario]:
+        consulta = (
+            select(UsuarioModel)
+            .options(selectinload(UsuarioModel.roles).selectinload(UsuarioRolModel.rol))
+            .join(UsuarioPuntoEmisionModel, UsuarioPuntoEmisionModel.usuario_id == UsuarioModel.id)
+            .where(
+                UsuarioModel.empresa_id == empresa_id,
+                UsuarioModel.activo.is_(True),
+                UsuarioPuntoEmisionModel.punto_emision_id == punto_emision_id,
+            )
+            .order_by(UsuarioModel.nombre_completo)
+        )
+        resultado = await self.session.execute(consulta)
+        return [_usuario_desde_modelo(modelo) for modelo in resultado.scalars().unique().all()]
+
+    async def tiene_punto(self, usuario_id: int, punto_emision_id: int) -> bool:
+        resultado = await self.session.execute(
+            select(UsuarioPuntoEmisionModel.id).where(
+                UsuarioPuntoEmisionModel.usuario_id == usuario_id,
+                UsuarioPuntoEmisionModel.punto_emision_id == punto_emision_id,
+            )
+        )
+        return resultado.scalar_one_or_none() is not None
+
 
 class SqlAlchemyAccesoRepository:
     def __init__(self, session: AsyncSession) -> None:

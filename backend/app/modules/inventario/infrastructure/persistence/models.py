@@ -56,6 +56,7 @@ class ProductoModel(Base):
     categoria_id: Mapped[int] = mapped_column(ForeignKey("categorias_producto.id"), index=True, nullable=False)
     precio_venta: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     aplica_iva: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    aplica_inventario: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     tipo_impuesto: Mapped[TipoImpuesto] = mapped_column(
         Enum(
             TipoImpuesto,

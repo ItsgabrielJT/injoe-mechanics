@@ -53,7 +53,7 @@ class Cliente:
     id: int | None
     empresa_id: int
     punto_emision_id: int
-    identificacion: str
+    identificacion: str | None
     tipo_cliente: TipoCliente
     nombres: str
     razon_social: str | None = None
@@ -104,5 +104,7 @@ class Vehiculo:
     transmision: TipoTransmision | None = None
     notas: str | None = None
     activo: bool = True
+    cliente_nombres: str | None = None
+    cliente_identificacion: str | None = None
     creado_en: datetime | None = None
     actualizado_en: datetime | None = None

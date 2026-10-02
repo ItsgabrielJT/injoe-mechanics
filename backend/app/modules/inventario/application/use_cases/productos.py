@@ -114,6 +114,7 @@ class CrearProductoUseCase:
                 codigo_barras=codigo_barras,
                 descripcion=command.descripcion.strip() if command.descripcion else None,
                 aplica_iva=command.aplica_iva,
+                aplica_inventario=command.aplica_inventario,
                 stock_minimo=Decimal(command.stock_minimo),
                 stock_maximo=Decimal(command.stock_maximo) if command.stock_maximo is not None else None,
                 unidad_medida=unidad,
@@ -122,7 +123,7 @@ class CrearProductoUseCase:
             )
         )
 
-        if command.stock_inicial and Decimal(command.stock_inicial.cantidad) > 0:
+        if command.aplica_inventario and command.stock_inicial and Decimal(command.stock_inicial.cantidad) > 0:
             await self._registrar_stock_inicial(producto, command, tenant)
             actualizado = await self.producto_repository.obtener_por_id(
                 producto.id or 0, tenant.empresa_id, tenant.punto_emision_id
@@ -236,6 +237,8 @@ class ActualizarProductoUseCase:
             producto.descripcion = descripcion
         if command.aplica_iva is not None:
             producto.aplica_iva = command.aplica_iva
+        if command.aplica_inventario is not None:
+            producto.aplica_inventario = command.aplica_inventario
         if command.stock_minimo is not None:
             if not stock_minimo_valido(Decimal(command.stock_minimo)):
                 raise CantidadInvalida("El stock mínimo no puede ser negativo")

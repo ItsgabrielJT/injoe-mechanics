@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from app.modules.clientes.application.dto import (
     ActualizarClienteCommand,
     ActualizarVehiculoCommand,
+    AltaRapidaCommand,
     CrearClienteCommand,
     CrearVehiculoCommand,
     ListarClientesQuery,
@@ -68,7 +69,7 @@ class ClienteResponse(BaseModel):
     id: int
     empresa_id: int
     punto_emision_id: int
-    identificacion: str
+    identificacion: str | None = None
     tipo_cliente: TipoCliente
     nombres: str
     razon_social: str | None = None
@@ -186,6 +187,8 @@ class VehiculoResponse(BaseModel):
     transmision: TipoTransmision | None = None
     notas: str | None = None
     activo: bool
+    cliente_nombres: str | None = None
+    cliente_identificacion: str | None = None
     creado_en: datetime | None = None
     actualizado_en: datetime | None = None
 
@@ -207,6 +210,8 @@ class VehiculoResponse(BaseModel):
             transmision=vehiculo.transmision,
             notas=vehiculo.notas,
             activo=vehiculo.activo,
+            cliente_nombres=vehiculo.cliente_nombres,
+            cliente_identificacion=vehiculo.cliente_identificacion,
             creado_en=vehiculo.creado_en,
             actualizado_en=vehiculo.actualizado_en,
         )
@@ -229,6 +234,24 @@ class ClienteDataResponse(BaseModel):
 class VehiculoDataResponse(BaseModel):
     data: VehiculoResponse
     message: str
+
+
+class AltaRapidaRequest(BaseModel):
+    placa: str = Field(..., min_length=1, max_length=20)
+    nombres: str | None = Field(None, min_length=2, max_length=255)
+    cliente_id: int | None = None
+
+    def to_command(self) -> AltaRapidaCommand:
+        return AltaRapidaCommand(placa=self.placa, nombres=self.nombres, cliente_id=self.cliente_id)
+
+
+class AltaRapidaData:
+    pass
+
+
+class AltaRapidaResponse(BaseModel):
+    data: dict
+    message: str = "Cliente y vehículo creados"
 
 
 def listar_clientes_query(

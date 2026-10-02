@@ -73,6 +73,7 @@ interface MuiDataTableProps {
   columnVisibilityModel?: GridColumnVisibilityModel;
   onColumnVisibilityModelChange?: (model: GridColumnVisibilityModel) => void;
   mobileHiddenFields?: string[];
+  footerTotals?: { label: string; value: string }[];
 }
 
 export const MuiDataTable: React.FC<MuiDataTableProps> = ({
@@ -99,6 +100,7 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
   columnVisibilityModel,
   onColumnVisibilityModelChange,
   mobileHiddenFields = [],
+  footerTotals,
 }) => {
   const [compacto, setCompacto] = React.useState(false);
   const [paginationModel, setPaginationModel] = React.useState({
@@ -284,6 +286,16 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
             },
           }}
         />
+        {footerTotals && footerTotals.length > 0 && (
+          <div className="flex flex-wrap items-center justify-end gap-6 border-t border-border px-4 py-3 text-sm bg-muted/20">
+            {footerTotals.map((item) => (
+              <div key={item.label} className="flex items-center gap-2">
+                <span className="uppercase tracking-wide text-muted-foreground text-xs font-semibold">{item.label}</span>
+                <span className="font-semibold text-foreground">{item.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </ThemeProvider>
   );

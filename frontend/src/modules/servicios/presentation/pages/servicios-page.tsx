@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
-import { Briefcase, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Briefcase, Pencil, Plus, Search, Trash2, Truck } from "lucide-react";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import {
   CATEGORIAS_SERVICIO,
@@ -23,6 +23,8 @@ import {
   aCategoria,
   type ServicioFormValues,
 } from "@/modules/servicios/presentation/forms/servicio-form-drawer";
+import { PreciosProveedorPanel } from "@/modules/proveedores";
+import { BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { MuiDataTable } from "@/shared/components/MuiDataTable";
 import { Button } from "@/shared/components/ui/button";
@@ -66,6 +68,8 @@ export function ServiciosPage() {
   const [servicioEdicion, setServicioEdicion] = useState<Servicio | null>(null);
   const [servicioAEliminar, setServicioAEliminar] = useState<Servicio | null>(null);
   const [eliminando, setEliminando] = useState(false);
+  const [tab, setTab] = useState<"servicios" | "proveedores">("servicios");
+  const [servicioPrecios, setServicioPrecios] = useState<Servicio | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 400);
@@ -233,6 +237,20 @@ export function ServiciosPage() {
         </Button>
       </div>
 
+      <div className="flex gap-1 overflow-x-auto rounded-lg border p-1 bg-muted/30">
+        <button className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${tab === "servicios" ? "bg-primary text-primary-foreground" : "hover:bg-primary/10"}`} onClick={() => setTab("servicios")}>
+          <Briefcase className="h-4 w-4" /> Servicios
+        </button>
+        <button className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${tab === "proveedores" ? "bg-primary text-primary-foreground" : "hover:bg-primary/10"}`} onClick={() => setTab("proveedores")}>
+          <Truck className="h-4 w-4" /> Proveedores
+        </button>
+      </div>
+
+      {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
+      {exito && <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">{exito}</div>}
+
+      {tab === "servicios" && (
+        <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -266,9 +284,6 @@ export function ServiciosPage() {
         </select>
       </div>
 
-      {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
-      {exito && <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">{exito}</div>}
-
       <MuiDataTable
         rows={servicios}
         columns={columns}
@@ -284,6 +299,22 @@ export function ServiciosPage() {
         showToolbar
         mobileHiddenFields={["descripcion", "categoria", "activo"]}
       />
+        </>
+      )}
+
+      {tab === "proveedores" && (
+        <div className="space-y-4">
+          <div className="max-w-md">
+            <BuscadorSelect
+              opciones={servicios.map((item) => ({ id: item.id, label: item.nombre, extra: item.codigo }))}
+              valor={servicioPrecios?.id ?? null}
+              onChange={(id) => setServicioPrecios(servicios.find((item) => item.id === id) ?? null)}
+              placeholder="Buscar servicio"
+            />
+          </div>
+          <PreciosProveedorPanel token={token} catalogoId={servicioPrecios?.id ?? null} tipo="servicio" />
+        </div>
+      )}
 
       <ServicioFormDrawer
         abierto={drawerAbierto}

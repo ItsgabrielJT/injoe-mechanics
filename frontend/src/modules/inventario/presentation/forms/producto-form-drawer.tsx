@@ -36,11 +36,12 @@ const schema = z.object({
   unidad_medida: z.string().max(20),
   peso: z.preprocess((valor) => (valor === "" || valor === null ? undefined : valor), z.coerce.number().min(0).optional()),
   activo: z.boolean(),
+  aplica_inventario: z.boolean(),
   registrar_stock: z.boolean(),
   bodega_id: z.number().nullable(),
   cantidad_inicial: z.coerce.number().min(0).optional(),
 }).superRefine((values, ctx) => {
-  if (values.registrar_stock) {
+  if (values.aplica_inventario && values.registrar_stock) {
     if (!values.bodega_id) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Selecciona una bodega", path: ["bodega_id"] });
     }
@@ -187,6 +188,12 @@ export function ProductoFormDrawer({ abierto, cargando, producto, categorias, bo
 
             <section className="space-y-4">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">Inventario</h3>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4" {...form.register("aplica_inventario")} /> Aplica inventario
+              </label>
+              {!form.watch("aplica_inventario") && (
+                <p className="text-sm text-muted-foreground">Este producto no moverá stock ni generará errores de inventario.</p>
+              )}
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Stock mín.</Label>
@@ -210,7 +217,7 @@ export function ProductoFormDrawer({ abierto, cargando, producto, categorias, bo
               </label>
             </section>
 
-            {!producto && (
+            {!producto && form.watch("aplica_inventario") && (
               <section className="space-y-4 rounded-lg border p-4">
                 <label className="flex items-center gap-2 text-sm font-medium">
                   <input type="checkbox" className="h-4 w-4" {...form.register("registrar_stock")} /> Registrar inventario inicial
@@ -271,6 +278,7 @@ function valoresIniciales(producto?: Producto | null): ProductoFormValues {
     unidad_medida: producto?.unidadMedida ?? "UN",
     peso: producto?.peso ?? undefined,
     activo: producto?.activo ?? true,
+    aplica_inventario: producto?.aplicaInventario ?? true,
     registrar_stock: false,
     bodega_id: null,
     cantidad_inicial: undefined,

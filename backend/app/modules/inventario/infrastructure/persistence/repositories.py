@@ -75,6 +75,7 @@ def _producto(model: ProductoModel, stock_total: Decimal | None = None) -> Produ
         descripcion=model.descripcion,
         categoria_nombre=model.categoria.nombre if model.categoria else None,
         aplica_iva=model.aplica_iva,
+        aplica_inventario=model.aplica_inventario,
         stock_minimo=Decimal(model.stock_minimo),
         stock_maximo=Decimal(model.stock_maximo) if model.stock_maximo is not None else None,
         unidad_medida=model.unidad_medida,
@@ -367,6 +368,7 @@ class SqlAlchemyProductoRepository:
         model.categoria_id = producto.categoria_id
         model.precio_venta = producto.precio_venta
         model.aplica_iva = producto.aplica_iva
+        model.aplica_inventario = producto.aplica_inventario
         model.tipo_impuesto = producto.tipo_impuesto
         model.stock_minimo = producto.stock_minimo
         model.stock_maximo = producto.stock_maximo
@@ -467,6 +469,8 @@ class SqlAlchemyProductoRepository:
         )
         alertas: list[AlertaStock] = []
         for producto in productos:
+            if not producto.aplica_inventario:
+                continue
             if producto.stock_minimo <= 0:
                 continue
             if producto.stock_total > producto.stock_minimo:

@@ -51,6 +51,7 @@ interface ProductoDto {
   categoria_nombre: string | null;
   precio_venta: number | string;
   aplica_iva: boolean;
+  aplica_inventario?: boolean;
   tipo_impuesto: TipoImpuesto;
   stock_minimo: number | string;
   stock_maximo: number | string | null;
@@ -110,6 +111,7 @@ function mapProducto(dto: ProductoDto): Producto {
     categoriaNombre: dto.categoria_nombre,
     precioVenta: aNumero(dto.precio_venta) ?? 0,
     aplicaIva: dto.aplica_iva,
+    aplicaInventario: dto.aplica_inventario ?? true,
     tipoImpuesto: dto.tipo_impuesto,
     stockMinimo: aNumero(dto.stock_minimo) ?? 0,
     stockMaximo: aNumero(dto.stock_maximo),
@@ -198,6 +200,7 @@ export interface ProductoInput {
   codigo_barras?: string | null;
   descripcion?: string | null;
   aplica_iva?: boolean;
+  aplica_inventario?: boolean;
   stock_minimo?: number;
   stock_maximo?: number | null;
   unidad_medida?: string;

@@ -43,7 +43,11 @@ async function parsear<T>(response: Response): Promise<T> {
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detalle = typeof data.detail === "string" ? data.detail : "No se pudo completar la solicitud";
+    const detalle = typeof data.detail === "string"
+      ? data.detail
+      : Array.isArray(data.detail)
+        ? data.detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join("; ") || "No se pudo completar la solicitud"
+        : "No se pudo completar la solicitud";
     throw new ApiError(response.status, detalle);
   }
   return data as T;

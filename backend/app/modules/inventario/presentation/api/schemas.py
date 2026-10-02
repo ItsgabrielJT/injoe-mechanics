@@ -147,6 +147,7 @@ class ProductoCreateRequest(BaseModel):
     codigo_barras: str | None = Field(None, max_length=64)
     descripcion: str | None = Field(None, max_length=500)
     aplica_iva: bool = True
+    aplica_inventario: bool = True
     stock_minimo: Decimal = Field(Decimal("0"), ge=0)
     stock_maximo: Decimal | None = Field(None, ge=0)
     unidad_medida: str = Field("UN", max_length=20)
@@ -177,6 +178,7 @@ class ProductoUpdateRequest(BaseModel):
     codigo_barras: str | None = Field(None, max_length=64)
     descripcion: str | None = Field(None, max_length=500)
     aplica_iva: bool | None = None
+    aplica_inventario: bool | None = None
     stock_minimo: Decimal | None = Field(None, ge=0)
     stock_maximo: Decimal | None = Field(None, ge=0)
     unidad_medida: str | None = Field(None, max_length=20)
@@ -199,6 +201,7 @@ class ProductoResponse(BaseModel):
     categoria_nombre: str | None = None
     precio_venta: Decimal
     aplica_iva: bool
+    aplica_inventario: bool
     tipo_impuesto: TipoImpuesto
     stock_minimo: Decimal
     stock_maximo: Decimal | None = None
@@ -223,6 +226,7 @@ class ProductoResponse(BaseModel):
             categoria_nombre=producto.categoria_nombre,
             precio_venta=producto.precio_venta,
             aplica_iva=producto.aplica_iva,
+            aplica_inventario=producto.aplica_inventario,
             tipo_impuesto=producto.tipo_impuesto,
             stock_minimo=producto.stock_minimo,
             stock_maximo=producto.stock_maximo,

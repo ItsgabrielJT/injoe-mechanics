@@ -30,6 +30,7 @@ export interface Producto {
   categoriaNombre: string | null;
   precioVenta: number;
   aplicaIva: boolean;
+  aplicaInventario: boolean;
   tipoImpuesto: TipoImpuesto;
   stockMinimo: number;
   stockMaximo: number | null;

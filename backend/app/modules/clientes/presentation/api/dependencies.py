@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.modules.acceso.presentation.api.dependencies import get_payload_autenticado
 from app.modules.clientes.application.dto import ContextoTenant
+from app.modules.clientes.application.use_cases.alta_rapida import AltaRapidaClienteVehiculoUseCase
 from app.modules.clientes.application.use_cases.actualizar_cliente import ActualizarClienteUseCase
 from app.modules.clientes.application.use_cases.actualizar_vehiculo import ActualizarVehiculoUseCase
 from app.modules.clientes.application.use_cases.crear_cliente import CrearClienteUseCase
@@ -108,3 +109,10 @@ async def get_eliminar_vehiculo_use_case(
     repository: Annotated[SqlAlchemyVehiculoRepository, Depends(get_vehiculo_repository)],
 ) -> EliminarVehiculoUseCase:
     return EliminarVehiculoUseCase(repository)
+
+
+async def get_alta_rapida_use_case(
+    cliente_repository: Annotated[SqlAlchemyClienteRepository, Depends(get_cliente_repository)],
+    vehiculo_repository: Annotated[SqlAlchemyVehiculoRepository, Depends(get_vehiculo_repository)],
+) -> AltaRapidaClienteVehiculoUseCase:
+    return AltaRapidaClienteVehiculoUseCase(cliente_repository, vehiculo_repository)

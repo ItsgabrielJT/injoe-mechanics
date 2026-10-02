@@ -25,7 +25,7 @@ import { ApiError } from "@/shared/infrastructure/http/http-error";
 
 function aInput(values: ClienteFormValues): ClienteInput {
   return {
-    identificacion: values.identificacion,
+    identificacion: values.identificacion.trim() || null,
     nombres: values.nombres,
     correos: values.correos.map((item) => item.value).filter((valor) => valor.trim()),
     tipo_cliente: values.tipo_cliente,
@@ -163,7 +163,7 @@ export function ClientesPage() {
 
   const columns = useMemo<GridColDef[]>(
     () => [
-      { field: "identificacion", headerName: "Cédula / RUC", flex: 1, minWidth: 120 },
+      { field: "identificacion", headerName: "Cédula / RUC", flex: 1, minWidth: 120, valueGetter: (_v, row) => row.identificacion || "Pendiente" },
       { field: "nombres", headerName: "Nombres", flex: 1.4, minWidth: 150 },
       { field: "correoPrincipal", headerName: "Correo", flex: 1.2, minWidth: 160 },
       { field: "telefonos", headerName: "Teléfono", flex: 1, minWidth: 120, valueGetter: (_value, row) => row.telefonos?.[0] ?? "" },

@@ -141,6 +141,7 @@ class Producto:
     descripcion: str | None = None
     categoria_nombre: str | None = None
     aplica_iva: bool = True
+    aplica_inventario: bool = True
     stock_minimo: Decimal = Decimal("0")
     stock_maximo: Decimal | None = None
     unidad_medida: str = "UN"

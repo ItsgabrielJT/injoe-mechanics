@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
-import { AlertTriangle, Boxes, Eye, FileText, Package, Pencil, Plus, Search, Trash2, Warehouse } from "lucide-react";
+import { AlertTriangle, Boxes, Eye, FileText, Package, Pencil, Plus, Search, Trash2, Truck, Warehouse } from "lucide-react";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import {
   etiquetaImpuesto,
@@ -40,10 +40,11 @@ import {
   reporteProductos,
   type ProductoInput,
 } from "@/modules/inventario/infrastructure/inventario-api";
-import { BuscadorMultiple } from "@/modules/inventario/presentation/components/buscador-select";
+import { BuscadorMultiple, BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
 import { BodegaFormDrawer, type BodegaFormValues } from "@/modules/inventario/presentation/forms/bodega-form-drawer";
 import { CategoriaFormDrawer, type CategoriaFormValues } from "@/modules/inventario/presentation/forms/categoria-form-drawer";
 import { ProductoFormDrawer, type ProductoFormValues } from "@/modules/inventario/presentation/forms/producto-form-drawer";
+import { PreciosProveedorPanel } from "@/modules/proveedores";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { MuiDataTable } from "@/shared/components/MuiDataTable";
 import { Portal } from "@/shared/components/portal";
@@ -52,7 +53,7 @@ import { Input } from "@/shared/components/ui/input";
 import { ApiError } from "@/shared/infrastructure/http/http-error";
 import { cn } from "@/shared/lib/utils";
 
-type Tab = "productos" | "alertas" | "categorias" | "bodegas";
+type Tab = "productos" | "alertas" | "categorias" | "bodegas" | "proveedores";
 
 export function ProductosPage() {
   const { sesion, puntoActivo } = useSesionContext();
@@ -178,13 +179,14 @@ export function ProductosPage() {
         codigo_barras: values.codigo_barras.trim() || null,
         descripcion: values.descripcion.trim() || null,
         aplica_iva: values.aplica_iva,
+        aplica_inventario: values.aplica_inventario,
         stock_minimo: Number(values.stock_minimo || 0),
         stock_maximo: values.stock_maximo ?? null,
         unidad_medida: values.unidad_medida || "UN",
         peso: values.peso ?? null,
         activo: values.activo,
         stock_inicial:
-          !productoEdicion && values.registrar_stock && values.bodega_id
+          !productoEdicion && values.aplica_inventario && values.registrar_stock && values.bodega_id
             ? { bodega_id: values.bodega_id, cantidad: Number(values.cantidad_inicial) }
             : null,
       };
@@ -365,6 +367,7 @@ export function ProductosPage() {
           ["alertas", "Alertas", AlertTriangle],
           ["categorias", "Categorías", Boxes],
           ["bodegas", "Bodegas", Warehouse],
+          ["proveedores", "Proveedores", Truck],
         ] as const).map(([key, label, Icon]) => (
           <button
             key={key}
@@ -428,6 +431,22 @@ export function ProductosPage() {
       )}
       {tab === "bodegas" && (
         <MuiDataTable rows={bodegas} columns={columnsBodegas} pageSize={10} storageKey="mecanicos.bodegas.columnas" showToolbar />
+      )}
+      {tab === "proveedores" && (
+        <div className="space-y-4">
+          <div className="max-w-md">
+            <BuscadorSelect
+              opciones={productos.concat(catalogoProductos).filter((item, index, arr) => arr.findIndex((p) => p.id === item.id) === index).map((item) => ({ id: item.id, label: item.nombre, extra: item.codigo }))}
+              valor={detalle?.id ?? null}
+              onChange={(id) => {
+                const encontrado = productos.concat(catalogoProductos).find((item) => item.id === id) ?? null;
+                setDetalle(encontrado);
+              }}
+              placeholder="Buscar producto"
+            />
+          </div>
+          <PreciosProveedorPanel token={token} catalogoId={detalle?.id ?? null} tipo="producto" />
+        </div>
       )}
 
       <ProductoFormDrawer

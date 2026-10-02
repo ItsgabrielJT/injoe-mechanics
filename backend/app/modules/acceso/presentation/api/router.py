@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from app.modules.acceso.application.dto import IniciarSesionCommand, SeleccionarContextoCommand
 from app.modules.acceso.application.use_cases.cambiar_punto import CambiarPuntoUseCase
@@ -15,7 +16,10 @@ from app.modules.acceso.presentation.api.dependencies import (
     get_payload_autenticado,
     get_refrescar_sesion_use_case,
     get_seleccionar_contexto_use_case,
+    get_usuario_repository,
 )
+from app.modules.identidad.infrastructure.persistence.repositories import SqlAlchemyUsuarioRepository
+from app.shared.domain.exceptions import SesionSinContexto
 from app.modules.acceso.presentation.api.schemas import (
     LoginRequest,
     RefreshRequest,
@@ -90,3 +94,43 @@ async def me(
         punto_emision_id=payload.get("punto_emision_id"),
     )
     return SesionResponse.desde_resultado(resultado, incluir_tokens=False)
+
+
+class UsuarioTecnicoResponse(BaseModel):
+    id: int
+    nombre_completo: str
+    correo: str
+    roles: list[str]
+
+
+class UsuariosListResponse(BaseModel):
+    data: list[UsuarioTecnicoResponse]
+    total: int
+    message: str = "Usuarios del punto"
+
+
+usuarios_router = APIRouter(prefix="/usuarios", tags=["usuarios"])
+
+
+@usuarios_router.get("/", response_model=UsuariosListResponse)
+async def listar_usuarios_punto(
+    payload: Annotated[dict, Depends(get_payload_autenticado)],
+    repository: Annotated[SqlAlchemyUsuarioRepository, Depends(get_usuario_repository)],
+) -> UsuariosListResponse:
+    empresa_id = payload.get("empresa_id")
+    punto_emision_id = payload.get("punto_emision_id")
+    if empresa_id is None or punto_emision_id is None:
+        raise SesionSinContexto()
+    usuarios = await repository.listar_por_punto(int(empresa_id), int(punto_emision_id))
+    return UsuariosListResponse(
+        data=[
+            UsuarioTecnicoResponse(
+                id=usuario.id,
+                nombre_completo=usuario.nombre_completo,
+                correo=usuario.correo,
+                roles=usuario.roles,
+            )
+            for usuario in usuarios
+        ],
+        total=len(usuarios),
+    )

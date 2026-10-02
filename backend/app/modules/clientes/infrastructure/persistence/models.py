@@ -11,14 +11,12 @@ from app.modules.clientes.domain.entities import TipoCliente, TipoCombustible, T
 
 class ClienteModel(Base):
     __tablename__ = "clientes"
-    __table_args__ = (
-        UniqueConstraint("empresa_id", "punto_emision_id", "identificacion", name="uq_clientes_identificacion_punto"),
-    )
+    __table_args__ = ()
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True, nullable=False)
     punto_emision_id: Mapped[int] = mapped_column(ForeignKey("puntos_emision.id"), index=True, nullable=False)
-    identificacion: Mapped[str] = mapped_column(String(13), index=True, nullable=False)
+    identificacion: Mapped[str | None] = mapped_column(String(13), index=True)
     tipo_cliente: Mapped[TipoCliente] = mapped_column(
         Enum(TipoCliente, name="tipo_cliente", native_enum=True, create_type=False, values_callable=lambda enum: [item.value for item in enum]),
         nullable=False,

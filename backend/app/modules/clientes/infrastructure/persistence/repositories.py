@@ -49,7 +49,11 @@ def _cliente_desde_modelo(
     )
 
 
-def _vehiculo_desde_modelo(model: VehiculoModel) -> Vehiculo:
+def _vehiculo_desde_modelo(
+    model: VehiculoModel,
+    cliente_nombres: str | None = None,
+    cliente_identificacion: str | None = None,
+) -> Vehiculo:
     return Vehiculo(
         id=model.id,
         empresa_id=model.empresa_id,
@@ -66,6 +70,8 @@ def _vehiculo_desde_modelo(model: VehiculoModel) -> Vehiculo:
         transmision=model.transmision,
         notas=model.notas,
         activo=model.activo,
+        cliente_nombres=cliente_nombres,
+        cliente_identificacion=cliente_identificacion,
         creado_en=model.creado_en,
         actualizado_en=model.actualizado_en,
     )
@@ -259,7 +265,11 @@ class SqlAlchemyVehiculoRepository:
         punto_emision_id: int,
         query: ListarVehiculosQuery,
     ) -> tuple[list[Vehiculo], int]:
-        stmt = select(VehiculoModel).where(*self._alcance(empresa_id, punto_emision_id))
+        stmt = (
+            select(VehiculoModel, ClienteModel.nombres, ClienteModel.identificacion)
+            .join(ClienteModel, ClienteModel.id == VehiculoModel.cliente_id)
+            .where(*self._alcance(empresa_id, punto_emision_id))
+        )
         if query.cliente_id:
             stmt = stmt.where(VehiculoModel.cliente_id == query.cliente_id)
         if query.search:
@@ -269,13 +279,18 @@ class SqlAlchemyVehiculoRepository:
                     VehiculoModel.placa.ilike(termino),
                     VehiculoModel.marca.ilike(termino),
                     VehiculoModel.modelo.ilike(termino),
+                    ClienteModel.nombres.ilike(termino),
+                    ClienteModel.identificacion.ilike(termino),
                 )
             )
         total = (await self.session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
         stmt = stmt.order_by(VehiculoModel.placa, VehiculoModel.id)
         stmt = stmt.offset((query.page - 1) * query.size).limit(query.size)
-        models = list((await self.session.execute(stmt)).scalars().all())
-        return [_vehiculo_desde_modelo(model) for model in models], total
+        filas = list((await self.session.execute(stmt)).all())
+        return [
+            _vehiculo_desde_modelo(model, nombres, identificacion)
+            for model, nombres, identificacion in filas
+        ], total
 
     async def listar_por_cliente(
         self,

@@ -65,6 +65,7 @@ class CrearProductoCommand:
     codigo_barras: str | None = None
     descripcion: str | None = None
     aplica_iva: bool = True
+    aplica_inventario: bool = True
     stock_minimo: Decimal = Decimal("0")
     stock_maximo: Decimal | None = None
     unidad_medida: str = "UN"
@@ -84,6 +85,7 @@ class ActualizarProductoCommand:
     codigo_barras: str | None = None
     descripcion: str | None = None
     aplica_iva: bool | None = None
+    aplica_inventario: bool | None = None
     stock_minimo: Decimal | None = None
     stock_maximo: Decimal | None = None
     unidad_medida: str | None = None

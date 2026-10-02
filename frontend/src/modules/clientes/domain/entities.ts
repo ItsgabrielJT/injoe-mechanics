@@ -16,7 +16,7 @@ export interface Cliente {
   id: number;
   empresaId: number;
   puntoEmisionId: number;
-  identificacion: string;
+  identificacion: string | null;
   tipoCliente: TipoCliente;
   nombres: string;
   razonSocial: string | null;
@@ -56,10 +56,12 @@ export interface Vehiculo {
   transmision: TipoTransmision | null;
   notas: string | null;
   activo: boolean;
+  clienteNombres?: string | null;
+  clienteIdentificacion?: string | null;
 }
 
 export interface ClienteInput {
-  identificacion: string;
+  identificacion: string | null;
   nombres: string;
   correos: string[];
   tipo_cliente: TipoCliente;

@@ -5,7 +5,7 @@ interface ClienteApiDto {
   id: number;
   empresa_id: number;
   punto_emision_id: number;
-  identificacion: string;
+  identificacion: string | null;
   tipo_cliente: Cliente["tipoCliente"];
   nombres: string;
   razon_social: string | null;
@@ -45,6 +45,8 @@ interface VehiculoApiDto {
   transmision: Vehiculo["transmision"];
   notas: string | null;
   activo: boolean;
+  cliente_nombres?: string | null;
+  cliente_identificacion?: string | null;
 }
 
 interface ListaApi<T> {
@@ -115,7 +117,34 @@ function mapVehiculo(dto: VehiculoApiDto): Vehiculo {
     transmision: dto.transmision,
     notas: dto.notas,
     activo: dto.activo,
+    clienteNombres: dto.cliente_nombres,
+    clienteIdentificacion: dto.cliente_identificacion,
   };
+}
+
+export async function listarVehiculos(
+  token: string,
+  params: { page?: number; size?: number; search?: string },
+): Promise<{ data: Vehiculo[]; total: number }> {
+  const query = new URLSearchParams({
+    page: String(params.page ?? 1),
+    size: String(params.size ?? 20),
+  });
+  if (params.search) query.set("search", params.search);
+  const dto = await httpClient<ListaApi<VehiculoApiDto>>(`/vehiculos/?${query.toString()}`, { token });
+  return { data: dto.data.map(mapVehiculo), total: dto.total };
+}
+
+export async function altaRapidaClienteVehiculo(
+  token: string,
+  body: { nombres?: string; placa: string; cliente_id?: number },
+): Promise<{ cliente: Cliente; vehiculo: Vehiculo }> {
+  const dto = await httpClient<DataApi<{ cliente: ClienteApiDto; vehiculo: VehiculoApiDto }>>("/clientes/alta-rapida", {
+    method: "POST",
+    token,
+    body,
+  });
+  return { cliente: mapCliente(dto.data.cliente), vehiculo: mapVehiculo(dto.data.vehiculo) };
 }
 
 export async function listarClientes(

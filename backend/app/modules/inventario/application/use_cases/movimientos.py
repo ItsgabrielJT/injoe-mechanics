@@ -23,6 +23,7 @@ from app.modules.inventario.domain.exceptions import (
     ItemsRequeridos,
     MovimientoNoEncontrado,
     ProductoNoEncontrado,
+    ProductoSinInventario,
     TipoAjusteRequerido,
 )
 
@@ -86,6 +87,8 @@ class RegistrarMovimientoUseCase:
             )
             if producto is None:
                 raise ProductoNoEncontrado(f"Producto {item.producto_id} no encontrado")
+            if not producto.aplica_inventario:
+                raise ProductoSinInventario(f"{producto.nombre} no aplica inventario")
             lineas.append(
                 LineaMovimiento(
                     producto_id=item.producto_id,

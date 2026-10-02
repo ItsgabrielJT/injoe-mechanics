@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/utils";
 const schema = z.object({
   identificacion: z
     .string()
-    .refine((valor) => valor.length === 10 || valor.length === 13, "La cédula debe tener 10 dígitos o el RUC 13"),
+    .refine((valor) => !valor || valor.length === 10 || valor.length === 13, "La cédula debe tener 10 dígitos o el RUC 13"),
   nombres: z.string().min(2, "Los nombres son obligatorios"),
   tipo_cliente: z.enum(["PERSONA_NATURAL", "PERSONA_JURIDICA"]),
   razon_social: z.string().optional(),
@@ -29,8 +29,7 @@ const schema = z.object({
         value: z
           .string()
           .trim()
-          .min(1, "El correo es obligatorio")
-          .email("Ingresa un correo válido"),
+          .refine((valor) => !valor || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor), "Ingresa un correo válido"),
       }),
     )
     .min(1, "Debe registrar al menos un correo"),
@@ -44,6 +43,17 @@ const schema = z.object({
   correo_fiscal: z.string().optional(),
   notas: z.string().optional(),
   activo: z.boolean(),
+  ficha_incompleta: z.boolean(),
+}).superRefine((values, ctx) => {
+  if (!values.ficha_incompleta) {
+    if (!values.identificacion || (values.identificacion.length !== 10 && values.identificacion.length !== 13)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "La cédula debe tener 10 dígitos o el RUC 13", path: ["identificacion"] });
+    }
+    const correos = values.correos.map((item) => item.value.trim()).filter(Boolean);
+    if (correos.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Debe registrar al menos un correo", path: ["correos"] });
+    }
+  }
 });
 
 export type ClienteFormValues = z.infer<typeof schema>;
@@ -77,6 +87,7 @@ function valoresIniciales(cliente?: Cliente | null): ClienteFormValues {
     correo_fiscal: cliente?.correoFiscal ?? "",
     notas: cliente?.notas ?? "",
     activo: cliente?.activo ?? true,
+    ficha_incompleta: Boolean(cliente && !cliente.identificacion),
   };
 }
 
@@ -255,7 +266,7 @@ export function ClienteFormDrawer({ abierto, cargando, cliente, onClose, onSubmi
               <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">Identidad</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Cédula / RUC *</Label>
+                  <Label>{cliente && !cliente.identificacion ? "Cédula / RUC" : "Cédula / RUC *"}</Label>
                   <Input
                     className={cn(form.formState.errors.identificacion && "border-destructive focus-visible:ring-destructive")}
                     {...form.register("identificacion")}
@@ -263,6 +274,9 @@ export function ClienteFormDrawer({ abierto, cargando, cliente, onClose, onSubmi
                   />
                   {form.formState.errors.identificacion && (
                     <p className="text-xs text-destructive">{form.formState.errors.identificacion.message}</p>
+                  )}
+                  {cliente && !cliente.identificacion && (
+                    <p className="text-xs text-muted-foreground">Ficha creada desde una orden. Completa cédula y correo cuando los tengas; puedes guardar solo el nombre.</p>
                   )}
                 </div>
                 <div className="space-y-2">

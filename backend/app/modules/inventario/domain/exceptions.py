@@ -101,6 +101,11 @@ class ItemsRequeridos(ErrorDeDominio):
         super().__init__(mensaje)
 
 
+class ProductoSinInventario(ErrorDeDominio):
+    def __init__(self, mensaje: str = "Este producto no aplica inventario") -> None:
+        super().__init__(mensaje)
+
+
 class RecursoEnUso(ErrorDeDominio):
     def __init__(self, mensaje: str = "No se puede eliminar porque tiene registros asociados") -> None:
         super().__init__(mensaje)
