@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.modules.acceso.application.dto import ResultadoSesion
 
 
@@ -49,6 +50,7 @@ class SesionResponse(BaseModel):
     refresh_token: str | None = None
     token_type: str = "bearer"
     expira_en: int | None = None
+    refresh_expira_en: int | None = None
     usuario: UsuarioResponse
     empresas: list[EmpresaResponse]
     empresa_id: int | None = None
@@ -81,6 +83,7 @@ class SesionResponse(BaseModel):
             access_token=resultado.access_token if incluir_tokens else None,
             refresh_token=resultado.refresh_token if incluir_tokens else None,
             expira_en=resultado.expira_en if incluir_tokens else None,
+            refresh_expira_en=(settings.REFRESH_TOKEN_EXPIRE_HOURS * 3600) if incluir_tokens else None,
             usuario=UsuarioResponse(
                 id=resultado.usuario.id,
                 correo=resultado.usuario.correo,

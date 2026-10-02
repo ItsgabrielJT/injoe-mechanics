@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuthGuard } from "@/modules/acceso/presentation/guards/auth-guard";
 import { SesionProvider } from "@/modules/acceso/presentation/state/sesion-context";
 import "./globals.css";
 
@@ -11,7 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body>
-        <SesionProvider>{children}</SesionProvider>
+        <SesionProvider>
+          <AuthGuard>{children}</AuthGuard>
+        </SesionProvider>
       </body>
     </html>
   );

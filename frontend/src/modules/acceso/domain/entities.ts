@@ -30,6 +30,8 @@ export interface Sesion {
   accessToken: string | null;
   refreshToken: string | null;
   expiraEn: number | null;
+  refreshExpiraEn: number | null;
+  accessTokenCreadoEn: number | null;
   usuario: Usuario;
   empresas: Empresa[];
   empresaId: number | null;

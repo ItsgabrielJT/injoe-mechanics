@@ -13,7 +13,7 @@ export default function ProtegidoLayout({ children }: { children: React.ReactNod
     if (!listo) {
       return;
     }
-    if (!sesion) {
+    if (!sesion?.accessToken && !sesion?.refreshToken) {
       router.replace("/login");
       return;
     }

@@ -8,35 +8,15 @@ import {
   iniciarSesion as iniciarSesionApi,
   seleccionarContexto as seleccionarContextoApi,
 } from "@/modules/acceso/infrastructure/auth-api";
-
-const STORAGE_KEY = "mecanicos.sesion";
-
-function leerSesion(): Sesion | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw) as Sesion;
-  } catch {
-    return null;
-  }
-}
-
-function guardarSesion(sesion: Sesion) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sesion));
-}
-
-function mezclarTokens(previa: Sesion | null, siguiente: Sesion): Sesion {
-  return {
-    ...siguiente,
-    accessToken: siguiente.accessToken ?? previa?.accessToken ?? null,
-    refreshToken: siguiente.refreshToken ?? previa?.refreshToken ?? null,
-  };
-}
+import { renovarSiHaceFalta } from "@/modules/acceso/infrastructure/renovar-sesion";
+import {
+  accessPorExpirar,
+  leerSesion,
+  limpiarSesion,
+  persistirSesion,
+  sesionOperativa,
+  suscribirSesion,
+} from "@/modules/acceso/infrastructure/sesion-storage";
 
 export function useSesion() {
   const router = useRouter();
@@ -45,23 +25,48 @@ export function useSesion() {
   const [listo, setListo] = useState(false);
 
   useEffect(() => {
-    setSesion(leerSesion());
+    const actual = leerSesion();
+    setSesion(actual);
     setListo(true);
+    return suscribirSesion(setSesion);
   }, []);
 
-  const persistir = useCallback((siguiente: Sesion) => {
-    const actual = mezclarTokens(leerSesion(), siguiente);
-    guardarSesion(actual);
-    setSesion(actual);
-    return actual;
-  }, []);
+  useEffect(() => {
+    if (!listo) {
+      return;
+    }
+
+    let cancelado = false;
+
+    const intentarRenovar = async () => {
+      const actual = leerSesion();
+      if (!actual || !sesionOperativa(actual) || !accessPorExpirar(actual)) {
+        return;
+      }
+      const renovada = await renovarSiHaceFalta();
+      if (!cancelado && renovada) {
+        setSesion(renovada);
+      }
+    };
+
+    void intentarRenovar();
+    const intervalo = window.setInterval(() => {
+      void intentarRenovar();
+    }, 60_000);
+
+    return () => {
+      cancelado = true;
+      window.clearInterval(intervalo);
+    };
+  }, [listo]);
+
+  const persistir = useCallback((siguiente: Sesion) => persistirSesion(siguiente), []);
 
   const login = useCallback(
     async (identificador: string, contrasena: string) => {
       setCargando(true);
       try {
-        const resultado = await iniciarSesionApi(identificador, contrasena);
-        persistir(resultado);
+        const resultado = persistir(await iniciarSesionApi(identificador, contrasena));
         if (resultado.requiereSeleccion) {
           router.push("/seleccionar-punto");
         } else {
@@ -83,8 +88,7 @@ export function useSesion() {
       }
       setCargando(true);
       try {
-        const resultado = await seleccionarContextoApi(puntoEmisionId, actual.accessToken);
-        persistir(resultado);
+        const resultado = persistir(await seleccionarContextoApi(puntoEmisionId, actual.accessToken));
         router.push("/dashboard");
         return resultado;
       } finally {
@@ -102,9 +106,7 @@ export function useSesion() {
       }
       setCargando(true);
       try {
-        const resultado = await cambiarPuntoApi(puntoEmisionId, actual.accessToken);
-        persistir(resultado);
-        return resultado;
+        return persistir(await cambiarPuntoApi(puntoEmisionId, actual.accessToken));
       } finally {
         setCargando(false);
       }
@@ -113,9 +115,8 @@ export function useSesion() {
   );
 
   const cerrar = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-    setSesion(null);
-    router.push("/login");
+    limpiarSesion();
+    router.replace("/login");
   }, [router]);
 
   const empresaActiva = useMemo<Empresa | null>(() => {
