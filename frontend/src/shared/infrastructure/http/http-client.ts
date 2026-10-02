@@ -28,6 +28,9 @@ export async function httpClient<T>(path: string, options: HttpOptions = {}): Pr
     throw new ApiError(0, "Error de conexión. Por favor, verifica tu conexión a internet");
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detalle = typeof data.detail === "string" ? data.detail : "No se pudo completar la solicitud";

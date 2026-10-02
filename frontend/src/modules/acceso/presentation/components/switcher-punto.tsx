@@ -61,14 +61,14 @@ export function SwitcherPunto() {
                     }}
                   >
                     <div className="flex items-center gap-3 w-full">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#50b3ff] to-[#3B82F6] flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center">
                         <Building2 className="w-4 h-4 text-white" />
                       </div>
                       <div className="text-left">
                         <div className="text-sm font-medium">{punto.nombre}</div>
                         <div className="text-xs text-muted-foreground">{empresa.nombre}</div>
                       </div>
-                      {puntoActivo.id === punto.id && <Check className="w-4 h-4 text-green-600 ml-auto" />}
+                      {puntoActivo.id === punto.id && <Check className="w-4 h-4 text-primary ml-auto" />}
                     </div>
                   </Button>
                 ))}

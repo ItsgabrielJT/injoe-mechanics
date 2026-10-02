@@ -8,23 +8,23 @@
     --foreground: 210 15% 25%;
     --card: 0 0% 100%;
     --card-foreground: 210 15% 25%;
-    --primary: 160 84% 39%;
-    --primary-dark: 161 93% 30%;
+    --primary: 16 100% 66%;
+    --primary-dark: 16 76% 56%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 160 45% 88%;
-    --secondary-foreground: 210 15% 25%;
-    --accent: 15 50% 88%;
-    --accent-foreground: 210 15% 25%;
-    --muted: 210 25% 95%;
-    --muted-foreground: 210 15% 45%;
-    --destructive: 0 65% 85%;
-    --destructive-foreground: 0 15% 25%;
-    --border: 210 25% 90%;
-    --input: 210 25% 95%;
-    --ring: 210 65% 85%;
-    --gradient-primary: linear-gradient(135deg, hsl(160 84% 39%), hsl(189 94% 43%));
-    --shadow-soft: 0 4px 20px -2px hsl(210 65% 85% / 0.3);
-    --shadow-elegant: 0 8px 30px -4px hsl(210 65% 85% / 0.4);
+    --secondary: 24 90% 92%;
+    --secondary-foreground: 20 20% 20%;
+    --accent: 24 85% 90%;
+    --accent-foreground: 20 20% 20%;
+    --muted: 24 30% 96%;
+    --muted-foreground: 20 10% 40%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 24 20% 88%;
+    --input: 24 25% 95%;
+    --ring: 16 100% 66%;
+    --gradient-primary: linear-gradient(135deg, hsl(16 100% 66%), hsl(16 76% 56%));
+    --shadow-soft: 0 4px 20px -2px hsl(16 80% 60% / 0.25);
+    --shadow-elegant: 0 8px 30px -4px hsl(16 80% 50% / 0.35);
     --radius: 0.75rem;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -35,7 +35,8 @@
     @apply border-border;
   }
 
+  html,
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground min-h-dvh overflow-x-hidden;
   }
 }

@@ -4,6 +4,18 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.modules.acceso.presentation.api.router import router as auth_router
+from app.modules.clientes.domain.exceptions import (
+    ClienteNoEncontrado,
+    CorreoRequerido,
+    IdentificacionDuplicada,
+    IdentificacionInvalida,
+    NombresRequeridos,
+    PlacaDuplicada,
+    PlacaRequerida,
+    VehiculoNoEncontrado,
+)
+from app.modules.clientes.infrastructure.persistence import models as clientes_models  # noqa: F401
+from app.modules.clientes.presentation.api.router import clientes_router, vehiculos_router
 from app.modules.identidad.infrastructure.persistence import models as identidad_models  # noqa: F401
 from app.shared.domain.exceptions import (
     CredencialesInvalidas,
@@ -35,6 +47,14 @@ CODIGOS_HTTP = {
     SinPuntosEmision: 403,
     PuntoNoAutorizado: 403,
     SesionSinContexto: 403,
+    ClienteNoEncontrado: 404,
+    VehiculoNoEncontrado: 404,
+    IdentificacionDuplicada: 409,
+    PlacaDuplicada: 409,
+    IdentificacionInvalida: 400,
+    CorreoRequerido: 400,
+    NombresRequeridos: 400,
+    PlacaRequerida: 400,
 }
 
 
@@ -47,6 +67,8 @@ async def manejar_error_dominio(_request: Request, exc: ErrorDeDominio) -> JSONR
 
 
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(clientes_router, prefix=settings.API_V1_STR)
+app.include_router(vehiculos_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/salud")
