@@ -27,6 +27,36 @@ from app.modules.servicios.domain.exceptions import (
     ServicioNoEncontrado,
     TipoImpuestoRequerido,
 )
+from app.modules.inventario.domain.exceptions import (
+    BodegaDestinoRequerida,
+    BodegaInactiva,
+    BodegaNoEncontrada,
+    CantidadInvalida,
+    CategoriaInactiva,
+    CategoriaNoEncontrada,
+    CategoriaRequerida,
+    CodigoBarrasDuplicado,
+    CodigoBarrasInvalido,
+    CodigoDuplicado as InventarioCodigoDuplicado,
+    CodigoRequerido,
+    ItemsRequeridos,
+    MovimientoNoEncontrado,
+    NombreDuplicado,
+    NombreRequerido as InventarioNombreRequerido,
+    PrecioInvalido as InventarioPrecioInvalido,
+    ProductoNoEncontrado,
+    RecursoEnUso,
+    StockInsuficiente,
+    TipoAjusteRequerido,
+    TipoImpuestoRequerido as InventarioTipoImpuestoRequerido,
+)
+from app.modules.inventario.infrastructure.persistence import models as inventario_models  # noqa: F401
+from app.modules.inventario.presentation.api.router import (
+    bodegas_router,
+    categorias_router,
+    movimientos_router,
+    productos_router,
+)
 from app.modules.servicios.infrastructure.persistence import models as servicios_models  # noqa: F401
 from app.modules.servicios.presentation.api.router import servicios_router
 from app.shared.domain.exceptions import (
@@ -75,6 +105,27 @@ CODIGOS_HTTP = {
     CodigoInvalido: 400,
     DescripcionExcedida: 400,
     PesoInvalido: 400,
+    CategoriaNoEncontrada: 404,
+    BodegaNoEncontrada: 404,
+    ProductoNoEncontrado: 404,
+    MovimientoNoEncontrado: 404,
+    InventarioCodigoDuplicado: 409,
+    CodigoBarrasDuplicado: 409,
+    NombreDuplicado: 409,
+    RecursoEnUso: 409,
+    StockInsuficiente: 409,
+    InventarioNombreRequerido: 400,
+    CodigoRequerido: 400,
+    CodigoBarrasInvalido: 400,
+    InventarioPrecioInvalido: 400,
+    InventarioTipoImpuestoRequerido: 400,
+    CategoriaRequerida: 400,
+    CategoriaInactiva: 400,
+    BodegaInactiva: 400,
+    CantidadInvalida: 400,
+    BodegaDestinoRequerida: 400,
+    TipoAjusteRequerido: 400,
+    ItemsRequeridos: 400,
 }
 
 
@@ -90,6 +141,10 @@ app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(clientes_router, prefix=settings.API_V1_STR)
 app.include_router(vehiculos_router, prefix=settings.API_V1_STR)
 app.include_router(servicios_router, prefix=settings.API_V1_STR)
+app.include_router(categorias_router, prefix=settings.API_V1_STR)
+app.include_router(bodegas_router, prefix=settings.API_V1_STR)
+app.include_router(productos_router, prefix=settings.API_V1_STR)
+app.include_router(movimientos_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/salud")

@@ -12,6 +12,7 @@ from app.core.database import Base  # noqa: E402
 from app.modules.identidad.infrastructure.persistence import models as identidad_models  # noqa: F401,E402
 from app.modules.clientes.infrastructure.persistence import models as clientes_models  # noqa: F401,E402
 from app.modules.servicios.infrastructure.persistence import models as servicios_models  # noqa: F401,E402
+from app.modules.inventario.infrastructure.persistence import models as inventario_models  # noqa: F401,E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
