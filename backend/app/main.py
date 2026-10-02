@@ -17,6 +17,18 @@ from app.modules.clientes.domain.exceptions import (
 from app.modules.clientes.infrastructure.persistence import models as clientes_models  # noqa: F401
 from app.modules.clientes.presentation.api.router import clientes_router, vehiculos_router
 from app.modules.identidad.infrastructure.persistence import models as identidad_models  # noqa: F401
+from app.modules.servicios.domain.exceptions import (
+    CodigoDuplicado,
+    CodigoInvalido,
+    DescripcionExcedida,
+    NombreRequerido,
+    PesoInvalido,
+    PrecioInvalido,
+    ServicioNoEncontrado,
+    TipoImpuestoRequerido,
+)
+from app.modules.servicios.infrastructure.persistence import models as servicios_models  # noqa: F401
+from app.modules.servicios.presentation.api.router import servicios_router
 from app.shared.domain.exceptions import (
     CredencialesInvalidas,
     ErrorDeDominio,
@@ -55,6 +67,14 @@ CODIGOS_HTTP = {
     CorreoRequerido: 400,
     NombresRequeridos: 400,
     PlacaRequerida: 400,
+    ServicioNoEncontrado: 404,
+    CodigoDuplicado: 409,
+    NombreRequerido: 400,
+    PrecioInvalido: 400,
+    TipoImpuestoRequerido: 400,
+    CodigoInvalido: 400,
+    DescripcionExcedida: 400,
+    PesoInvalido: 400,
 }
 
 
@@ -69,6 +89,7 @@ async def manejar_error_dominio(_request: Request, exc: ErrorDeDominio) -> JSONR
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(clientes_router, prefix=settings.API_V1_STR)
 app.include_router(vehiculos_router, prefix=settings.API_V1_STR)
+app.include_router(servicios_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/salud")

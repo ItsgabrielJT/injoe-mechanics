@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Menu, Users, X } from "lucide-react";
+import { Briefcase, LayoutDashboard, Menu, Users, X } from "lucide-react";
 import { SwitcherPunto } from "@/modules/acceso/presentation/components/switcher-punto";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import { Button } from "@/shared/components/ui/button";
@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/utils";
 const NAV = [
   { href: "/dashboard", label: "Panel", icon: LayoutDashboard },
   { href: "/clientes", label: "Clientes", icon: Users },
+  { href: "/servicios", label: "Servicios", icon: Briefcase },
 ];
 
 function SidebarContent({
