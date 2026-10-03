@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.modules.facturacion.infrastructure.info_adicional import additional_info_sri
 from app.modules.facturacion.domain.entities import (
     CONSUMIDOR_FINAL_IDENTIFICACION,
     CONSUMIDOR_FINAL_NOMBRE,
@@ -120,9 +121,7 @@ def construir_payload(factura: Factura, empresa, punto, environment: str) -> dic
         totals.append({"taxCode": "2", "percentageCode": "7", "taxableBase": _fmt(factura.subtotal_exento), "taxValue": "0.00"})
 
     base = factura.subtotal_15 + factura.subtotal_5 + factura.subtotal_0 + factura.subtotal_objeto + factura.subtotal_exento
-    additional = [{"name": "Telefono", "value": empresa.telefono or "N/A"}]
-    if correo:
-        additional.append({"name": "E-MAIL", "value": correo})
+    additional = additional_info_sri(factura, empresa, correo, factura.cliente_telefono)
     return {
         "invoice": {
             "documentInfo": {
@@ -191,13 +190,61 @@ async def firmar_factura(factura: Factura, empresa, punto) -> dict[str, Any]:
 async def consultar_autorizacion(clave_acceso: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=60) as client:
         key = await _api_key(client)
-        resp = await client.post(
-            f"{settings.SRI_SIGN_URL.rstrip('/')}/authorization/check",
-            json={"accessKey": clave_acceso},
-            headers={"X-API-Key": key},
-        )
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = await client.post(
+                f"{settings.SRI_SIGN_URL.rstrip('/')}/authorization/check",
+                json={"accessKey": clave_acceso},
+                headers={"X-API-Key": key},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            return {"result": None, "error": f"No se pudo consultar autorización: {exc}"}
+
+
+async def recuperar_secuencial(empresa_sri_id: int, numero: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=60) as client:
+        key = await _api_key(client)
+        try:
+            resp = await client.post(
+                f"{settings.SRI_SIGN_URL.rstrip('/')}/authorization/recover-sequential",
+                json={"empresa_id": int(empresa_sri_id), "numero_documento": numero},
+                headers={"X-API-Key": key},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            return {"result": None, "error": f"No se pudo recuperar el secuencial: {exc}"}
+
+
+def es_secuencial_registrado(respuesta: dict[str, Any] | str | None) -> bool:
+    if respuesta is None:
+        return False
+    if isinstance(respuesta, str):
+        texto = respuesta.upper()
+        return "SECUENCIAL" in texto and "REGISTRADO" in texto or "SRI_SEQUENTIAL_REGISTERED" in texto
+    partes = [
+        str(respuesta.get("error") or ""),
+        str(respuesta.get("errorCategory") or ""),
+        str(respuesta.get("status") or ""),
+        str(respuesta.get("errorType") or ""),
+    ]
+    result = respuesta.get("result") or {}
+    if isinstance(result, dict):
+        partes.append(str(result.get("error") or ""))
+        partes.append(str(result.get("status") or ""))
+        mensajes = result.get("sriMessages") or []
+    else:
+        mensajes = []
+    mensajes = respuesta.get("sriMessages") or mensajes or []
+    for item in mensajes:
+        if isinstance(item, dict):
+            partes.append(str(item.get("mensaje") or ""))
+            partes.append(str(item.get("informacionAdicional") or ""))
+        else:
+            partes.append(str(item))
+    texto = " ".join(partes).upper()
+    return "SRI_SEQUENTIAL_REGISTERED" in texto or ("SECUENCIAL" in texto and "REGISTRADO" in texto)
 
 
 def resumen_error(respuesta: dict[str, Any]) -> str:
