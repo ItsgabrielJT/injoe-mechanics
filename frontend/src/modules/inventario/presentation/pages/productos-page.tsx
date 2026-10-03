@@ -40,7 +40,7 @@ import {
   reporteProductos,
   type ProductoInput,
 } from "@/modules/inventario/infrastructure/inventario-api";
-import { BuscadorMultiple, BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
+import { BuscadorMultiple } from "@/modules/inventario/presentation/components/buscador-select";
 import { BodegaFormDrawer, type BodegaFormValues } from "@/modules/inventario/presentation/forms/bodega-form-drawer";
 import { CategoriaFormDrawer, type CategoriaFormValues } from "@/modules/inventario/presentation/forms/categoria-form-drawer";
 import { ProductoFormDrawer, type ProductoFormValues } from "@/modules/inventario/presentation/forms/producto-form-drawer";
@@ -89,6 +89,8 @@ export function ProductosPage() {
   const [bodegaEliminar, setBodegaEliminar] = useState<Bodega | null>(null);
 
   const [detalle, setDetalle] = useState<Producto | null>(null);
+  const [catalogoCostos, setCatalogoCostos] = useState<Producto[]>([]);
+  const [idsCostos, setIdsCostos] = useState<number[]>([]);
   const [existencias, setExistencias] = useState<Existencia[]>([]);
   const [kardex, setKardex] = useState<ItemKardex[]>([]);
   const [bodegaKardex, setBodegaKardex] = useState<number | "all">("all");
@@ -160,6 +162,13 @@ export function ProductosPage() {
       void cargarAlertas();
     }
   }, [cargarAlertas, tab, puntoActivo?.id]);
+
+  useEffect(() => {
+    if (tab !== "proveedores" || !token) return;
+    void listarProductos(token, { page: 1, size: 200, activo: true })
+      .then((respuesta) => setCatalogoCostos(respuesta.data))
+      .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudieron cargar los productos"));
+  }, [tab, token, puntoActivo?.id]);
 
   useEffect(() => {
     setPage(0);
@@ -434,18 +443,23 @@ export function ProductosPage() {
       )}
       {tab === "proveedores" && (
         <div className="space-y-4">
-          <div className="max-w-md">
-            <BuscadorSelect
-              opciones={productos.concat(catalogoProductos).filter((item, index, arr) => arr.findIndex((p) => p.id === item.id) === index).map((item) => ({ id: item.id, label: item.nombre, extra: item.codigo }))}
-              valor={detalle?.id ?? null}
-              onChange={(id) => {
-                const encontrado = productos.concat(catalogoProductos).find((item) => item.id === id) ?? null;
-                setDetalle(encontrado);
-              }}
-              placeholder="Buscar producto"
+          <div className="max-w-xl">
+            <p className="mb-1 text-sm font-medium">Productos</p>
+            <BuscadorMultiple
+              opciones={catalogoCostos.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}`, extra: formatoPrecio(item.precioVenta) }))}
+              valores={idsCostos}
+              onChange={setIdsCostos}
+              placeholder="Buscar y agregar productos para ver sus costos"
             />
           </div>
-          <PreciosProveedorPanel token={token} catalogoId={detalle?.id ?? null} tipo="producto" />
+          <PreciosProveedorPanel
+            token={token}
+            tipo="producto"
+            items={idsCostos
+              .map((id) => catalogoCostos.find((item) => item.id === id))
+              .filter((item): item is Producto => Boolean(item))
+              .map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}` }))}
+          />
         </div>
       )}
 
@@ -540,7 +554,7 @@ export function ProductosPage() {
         }
       }} />
 
-      {detalle && (
+      {detalle && tab !== "proveedores" && (
         <Portal>
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={() => setDetalle(null)} />

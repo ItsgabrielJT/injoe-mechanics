@@ -24,7 +24,7 @@ import {
   type ServicioFormValues,
 } from "@/modules/servicios/presentation/forms/servicio-form-drawer";
 import { PreciosProveedorPanel } from "@/modules/proveedores";
-import { BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
+import { BuscadorMultiple } from "@/modules/inventario/presentation/components/buscador-select";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { MuiDataTable } from "@/shared/components/MuiDataTable";
 import { Button } from "@/shared/components/ui/button";
@@ -69,7 +69,8 @@ export function ServiciosPage() {
   const [servicioAEliminar, setServicioAEliminar] = useState<Servicio | null>(null);
   const [eliminando, setEliminando] = useState(false);
   const [tab, setTab] = useState<"servicios" | "proveedores">("servicios");
-  const [servicioPrecios, setServicioPrecios] = useState<Servicio | null>(null);
+  const [catalogoCostos, setCatalogoCostos] = useState<Servicio[]>([]);
+  const [idsCostos, setIdsCostos] = useState<number[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 400);
@@ -106,6 +107,13 @@ export function ServiciosPage() {
   useEffect(() => {
     setPage(0);
   }, [debounced, categoria, estado]);
+
+  useEffect(() => {
+    if (tab !== "proveedores" || !token) return;
+    void listarServicios(token, { page: 1, size: 100, activo: true })
+      .then((respuesta) => setCatalogoCostos(respuesta.data))
+      .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudieron cargar los servicios"));
+  }, [tab, token, puntoActivo?.id]);
 
   async function guardarServicio(values: ServicioFormValues) {
     setGuardando(true);
@@ -304,15 +312,23 @@ export function ServiciosPage() {
 
       {tab === "proveedores" && (
         <div className="space-y-4">
-          <div className="max-w-md">
-            <BuscadorSelect
-              opciones={servicios.map((item) => ({ id: item.id, label: item.nombre, extra: item.codigo }))}
-              valor={servicioPrecios?.id ?? null}
-              onChange={(id) => setServicioPrecios(servicios.find((item) => item.id === id) ?? null)}
-              placeholder="Buscar servicio"
+          <div className="max-w-xl">
+            <p className="mb-1 text-sm font-medium">Servicios</p>
+            <BuscadorMultiple
+              opciones={catalogoCostos.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}`, extra: formatoPrecio(item.precioVenta) }))}
+              valores={idsCostos}
+              onChange={setIdsCostos}
+              placeholder="Buscar y agregar servicios para ver sus costos"
             />
           </div>
-          <PreciosProveedorPanel token={token} catalogoId={servicioPrecios?.id ?? null} tipo="servicio" />
+          <PreciosProveedorPanel
+            token={token}
+            tipo="servicio"
+            items={idsCostos
+              .map((id) => catalogoCostos.find((item) => item.id === id))
+              .filter((item): item is Servicio => Boolean(item))
+              .map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}` }))}
+          />
         </div>
       )}
 

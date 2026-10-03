@@ -135,7 +135,7 @@ class GuardarOrdenUseCase:
                     raise BodegaRequerida()
                 if not producto.aplica_inventario:
                     bodega_id = None
-                if command.proveedor_id:
+                if command.proveedor_id and Decimal(command.precio_compra) > 0:
                     await self.upsert_precio.execute(
                         UpsertPrecioCommand(
                             proveedor_id=command.proveedor_id,
@@ -153,7 +153,7 @@ class GuardarOrdenUseCase:
                 descripcion = descripcion or servicio.nombre
                 codigo = codigo or servicio.codigo
                 bodega_id = None
-                if command.proveedor_id:
+                if command.proveedor_id and Decimal(command.precio_compra) > 0:
                     await self.upsert_precio.execute(
                         UpsertPrecioCommand(
                             proveedor_id=command.proveedor_id,

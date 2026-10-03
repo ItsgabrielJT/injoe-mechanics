@@ -85,7 +85,8 @@ class UpsertPrecioUseCase:
 
         if existente and command.relacion_id is None:
             existente.precio_compra = Decimal(command.precio_compra)
-            existente.es_principal = command.es_principal
+            if command.es_principal:
+                existente.es_principal = True
             return await self.precio_repository.guardar(existente)
 
         if command.relacion_id and existente:

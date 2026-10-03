@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Car, ChevronDown, Package, Plus, Trash2, Wrench, X } from "lucide-react";
 import type { Cliente, Vehiculo } from "@/modules/clientes/domain/entities";
 import { altaRapidaClienteVehiculo, listarClientes, listarVehiculos } from "@/modules/clientes/infrastructure/clientes-api";
@@ -16,7 +16,7 @@ import {
 } from "@/modules/inventario/domain/entities";
 import { crearCategoria, crearProducto, listarExistencias } from "@/modules/inventario/infrastructure/inventario-api";
 import { BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
-import type { Proveedor } from "@/modules/proveedores/domain/entities";
+import type { PrecioProveedor, Proveedor } from "@/modules/proveedores/domain/entities";
 import { listarPreciosProducto, listarPreciosServicio } from "@/modules/proveedores/infrastructure/proveedores-api";
 import type { Servicio } from "@/modules/servicios/domain/entities";
 import { crearServicio } from "@/modules/servicios/infrastructure/servicios-api";
@@ -123,6 +123,16 @@ function textoNumero(valor: number | string | null | undefined): string {
   return String(valor);
 }
 
+function clavePrecios(tipo: "producto" | "servicio", id: number): string {
+  return `${tipo}:${id}`;
+}
+
+function costoRegistrado(precios: PrecioProveedor[], proveedorId: number | null): string {
+  if (!proveedorId) return "";
+  const hallado = precios.find((item) => item.proveedorId === proveedorId);
+  return hallado ? textoNumero(hallado.precioCompra) : "";
+}
+
 function InputImporte({
   value,
   onChange,
@@ -191,6 +201,8 @@ export function OrdenTrabajoFormDrawer({
   const [nuevoServicio, setNuevoServicio] = useState({ nombre: "", precio: "", aplicaIva: true, tipo: "15" as TipoImpuesto });
   const [creando, setCreando] = useState(false);
   const [lineaActiva, setLineaActiva] = useState<string | null>(null);
+  const [preciosPorClave, setPreciosPorClave] = useState<Record<string, PrecioProveedor[]>>({});
+  const preciosRef = useRef<Record<string, PrecioProveedor[]>>({});
 
   const ordenId = orden?.id ?? null;
 
@@ -205,6 +217,8 @@ export function OrdenTrabajoFormDrawer({
     setAltaProducto(false);
     setAltaServicio(false);
     setLineaActiva(null);
+    setPreciosPorClave({});
+    preciosRef.current = {};
     if (orden) {
       setClienteId(orden.clienteId);
       setVehiculoId(orden.vehiculoId);
@@ -410,9 +424,36 @@ export function OrdenTrabajoFormDrawer({
     setLineas((actuales) => actuales.map((linea) => (linea.key === key ? { ...linea, ...cambios } : linea)));
   }
 
+  function guardarPrecios(clave: string, precios: PrecioProveedor[]) {
+    preciosRef.current[clave] = precios;
+    setPreciosPorClave({ ...preciosRef.current });
+  }
+
+  async function obtenerPrecios(tipo: "producto" | "servicio", id: number): Promise<PrecioProveedor[]> {
+    const clave = clavePrecios(tipo, id);
+    if (preciosRef.current[clave]) return preciosRef.current[clave];
+    const precios = tipo === "producto" ? await listarPreciosProducto(token, id) : await listarPreciosServicio(token, id);
+    guardarPrecios(clave, precios);
+    return precios;
+  }
+
+  function aplicarCostoProveedor(linea: LineaDraft, precios: PrecioProveedor[], proveedorId: number | null) {
+    actualizarLinea(linea.key, { proveedorId, precioCompra: costoRegistrado(precios, proveedorId) });
+  }
+
+  async function elegirProveedor(linea: LineaDraft, proveedorId: number | null) {
+    const catalogoId = linea.tipo === "producto" ? linea.productoId : linea.servicioId;
+    if (!catalogoId || !proveedorId) {
+      actualizarLinea(linea.key, { proveedorId, precioCompra: proveedorId ? linea.precioCompra : "" });
+      return;
+    }
+    const precios = await obtenerPrecios(linea.tipo, catalogoId);
+    aplicarCostoProveedor(linea, precios, proveedorId);
+  }
+
   async function elegirProducto(linea: LineaDraft, productoId: number | null) {
     if (!productoId) {
-      actualizarLinea(linea.key, { productoId: null, descripcion: "", codigo: null, aplicaInventario: true });
+      actualizarLinea(linea.key, { productoId: null, descripcion: "", codigo: null, aplicaInventario: true, proveedorId: null, precioCompra: "" });
       return;
     }
     const producto = productos.find((item) => item.id === productoId);
@@ -428,21 +469,23 @@ export function OrdenTrabajoFormDrawer({
       tipoImpuesto: producto.tipoImpuesto,
       aplicaInventario: producto.aplicaInventario,
       bodegaId: producto.aplicaInventario ? linea.bodegaId : null,
+      proveedorId: null,
+      precioCompra: "",
     });
     if (producto.aplicaInventario && !existencias[producto.id]) {
       const stock = await listarExistencias(token, producto.id);
       setExistencias((actual) => ({ ...actual, [producto.id]: stock }));
     }
-    const precios = await listarPreciosProducto(token, producto.id);
+    const precios = await obtenerPrecios("producto", producto.id);
     const principal = precios.find((item) => item.esPrincipal) ?? precios[0];
     if (principal) {
-      actualizarLinea(linea.key, { proveedorId: principal.proveedorId, precioCompra: textoNumero(principal.precioCompra) });
+      aplicarCostoProveedor({ ...linea, productoId, tipo: "producto" }, precios, principal.proveedorId);
     }
   }
 
   async function elegirServicio(linea: LineaDraft, servicioId: number | null) {
     if (!servicioId) {
-      actualizarLinea(linea.key, { servicioId: null, descripcion: "", codigo: null });
+      actualizarLinea(linea.key, { servicioId: null, descripcion: "", codigo: null, proveedorId: null, precioCompra: "" });
       return;
     }
     const servicio = servicios.find((item) => item.id === servicioId);
@@ -458,13 +501,41 @@ export function OrdenTrabajoFormDrawer({
       tipoImpuesto: servicio.tipoImpuesto,
       aplicaInventario: false,
       bodegaId: null,
+      proveedorId: null,
+      precioCompra: "",
     });
-    const precios = await listarPreciosServicio(token, servicio.id);
+    const precios = await obtenerPrecios("servicio", servicio.id);
     const principal = precios.find((item) => item.esPrincipal) ?? precios[0];
     if (principal) {
-      actualizarLinea(linea.key, { proveedorId: principal.proveedorId, precioCompra: textoNumero(principal.precioCompra) });
+      aplicarCostoProveedor({ ...linea, servicioId, tipo: "servicio" }, precios, principal.proveedorId);
     }
   }
+
+  useEffect(() => {
+    if (!abierto) return;
+    const pendientes = lineas
+      .map((linea) => {
+        const id = linea.tipo === "producto" ? linea.productoId : linea.servicioId;
+        if (!id) return null;
+        const clave = clavePrecios(linea.tipo, id);
+        if (preciosRef.current[clave]) return null;
+        return { tipo: linea.tipo, id, clave };
+      })
+      .filter((item): item is { tipo: LineaDraft["tipo"]; id: number; clave: string } => Boolean(item));
+    if (pendientes.length === 0) return;
+    let cancelado = false;
+    void Promise.all(
+      pendientes.map(async (item) => {
+        const precios = item.tipo === "producto"
+          ? await listarPreciosProducto(token, item.id)
+          : await listarPreciosServicio(token, item.id);
+        if (!cancelado) guardarPrecios(item.clave, precios);
+      }),
+    );
+    return () => {
+      cancelado = true;
+    };
+  }, [abierto, lineas, token]);
 
   function agregarLinea(tipo: "producto" | "servicio") {
     const linea = lineaVacia(tipo);
@@ -568,6 +639,21 @@ export function OrdenTrabajoFormDrawer({
     } finally {
       setCreando(false);
     }
+  }
+
+  function preciosDeLinea(linea: LineaDraft): PrecioProveedor[] {
+    const id = linea.tipo === "producto" ? linea.productoId : linea.servicioId;
+    if (!id) return [];
+    return preciosPorClave[clavePrecios(linea.tipo, id)] ?? [];
+  }
+
+  function notaCostoLinea(linea: LineaDraft): string | null {
+    if (!linea.proveedorId) return null;
+    const id = linea.tipo === "producto" ? linea.productoId : linea.servicioId;
+    if (!id) return null;
+    const registrado = preciosDeLinea(linea).some((item) => item.proveedorId === linea.proveedorId);
+    if (registrado) return "Costo registrado de este proveedor";
+    return "Al guardar la orden, este costo se registrará en Proveedores";
   }
 
   const resumen = useMemo(() => {
@@ -857,6 +943,8 @@ export function OrdenTrabajoFormDrawer({
                   const stock = linea.productoId ? existencias[linea.productoId] ?? [] : [];
                   const abierta = lineaActiva === linea.key;
                   const Icono = linea.tipo === "producto" ? Package : Wrench;
+                  const notaCosto = notaCostoLinea(linea);
+                  const preciosLinea = preciosDeLinea(linea);
                   return (
                     <div key={linea.key} id={`linea-ot-${linea.key}`} className="rounded-lg border scroll-mt-4">
                       <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5">
@@ -914,6 +1002,9 @@ export function OrdenTrabajoFormDrawer({
                             <div className="space-y-1">
                               <Label>Costo proveedor</Label>
                               <InputImporte value={linea.precioCompra} onChange={(valor) => actualizarLinea(linea.key, { precioCompra: valor })} />
+                              {notaCosto && (
+                                <p className="text-xs text-muted-foreground">{notaCosto}</p>
+                              )}
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -928,9 +1019,16 @@ export function OrdenTrabajoFormDrawer({
                             <div className="space-y-1">
                               <Label>Proveedor</Label>
                               <BuscadorSelect
-                                opciones={proveedores.map((item) => ({ id: item.id, label: item.nombres, extra: item.identificacion }))}
+                                opciones={proveedores.map((item) => {
+                                  const costo = preciosLinea.find((precio) => precio.proveedorId === item.id);
+                                  return {
+                                    id: item.id,
+                                    label: item.nombres,
+                                    extra: [item.identificacion, costo ? `Costo ${formatoPrecio(costo.precioCompra)}` : null].filter(Boolean).join(" · "),
+                                  };
+                                })}
                                 valor={linea.proveedorId}
-                                onChange={(id) => actualizarLinea(linea.key, { proveedorId: id })}
+                                onChange={(id) => void elegirProveedor(linea, id)}
                                 placeholder="Opcional"
                               />
                             </div>

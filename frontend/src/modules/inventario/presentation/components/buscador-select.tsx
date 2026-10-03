@@ -1,8 +1,50 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+
+const EVENTO_BUSCADOR_ABRIO = "injoe:buscador-abrio";
+
+function useCerrarAlClickFuera(abierto: boolean, onCerrar: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onCerrarRef = useRef(onCerrar);
+  onCerrarRef.current = onCerrar;
+
+  useEffect(() => {
+    if (!abierto) return;
+    const id = {};
+
+    function cerrarSiFuera(event: Event) {
+      const destino = event.target;
+      if (!(destino instanceof Node) || !ref.current?.contains(destino)) {
+        onCerrarRef.current();
+      }
+    }
+
+    function cerrarPorOtro(event: Event) {
+      if ((event as CustomEvent).detail !== id) {
+        onCerrarRef.current();
+      }
+    }
+
+    function handleTecla(event: KeyboardEvent) {
+      if (event.key === "Escape") onCerrarRef.current();
+    }
+
+    document.dispatchEvent(new CustomEvent(EVENTO_BUSCADOR_ABRIO, { detail: id }));
+    document.addEventListener(EVENTO_BUSCADOR_ABRIO, cerrarPorOtro);
+    document.addEventListener("pointerdown", cerrarSiFuera, true);
+    document.addEventListener("keydown", handleTecla);
+    return () => {
+      document.removeEventListener(EVENTO_BUSCADOR_ABRIO, cerrarPorOtro);
+      document.removeEventListener("pointerdown", cerrarSiFuera, true);
+      document.removeEventListener("keydown", handleTecla);
+    };
+  }, [abierto]);
+
+  return ref;
+}
 
 export interface OpcionBuscador {
   id: number;
@@ -22,6 +64,7 @@ interface BuscadorSelectProps {
 export function BuscadorSelect({ opciones, valor, onChange, placeholder = "Buscar...", disabled, error }: BuscadorSelectProps) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState("");
+  const contenedor = useCerrarAlClickFuera(abierto, () => setAbierto(false));
   const seleccionado = opciones.find((item) => item.id === valor) ?? null;
 
   const filtradas = useMemo(() => {
@@ -41,7 +84,7 @@ export function BuscadorSelect({ opciones, valor, onChange, placeholder = "Busca
   }, [abierto]);
 
   return (
-    <div className="relative">
+    <div ref={contenedor} className="relative">
       <button
         type="button"
         disabled={disabled}
@@ -113,6 +156,8 @@ interface BuscadorMultipleProps {
 
 export function BuscadorMultiple({ opciones, valores, onChange, placeholder }: BuscadorMultipleProps) {
   const [texto, setTexto] = useState("");
+  const listaAbierta = texto.trim().length > 0;
+  const contenedor = useCerrarAlClickFuera(listaAbierta, () => setTexto(""));
   const filtradas = useMemo(() => {
     const termino = texto.trim().toLowerCase();
     return opciones
@@ -123,15 +168,15 @@ export function BuscadorMultiple({ opciones, valores, onChange, placeholder }: B
   const seleccionadas = opciones.filter((item) => valores.includes(item.id));
 
   return (
-    <div className="space-y-2">
+    <div ref={contenedor} className="relative space-y-2">
       <input
         className="flex h-10 w-full rounded-md border border-input px-3 text-sm bg-background"
         placeholder={placeholder}
         value={texto}
         onChange={(event) => setTexto(event.target.value)}
       />
-      {filtradas.length > 0 && texto.trim() && (
-        <ul className="rounded-md border bg-card">
+      {filtradas.length > 0 && listaAbierta && (
+        <ul className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-elegant">
           {filtradas.map((item) => (
             <li key={item.id}>
               <button
