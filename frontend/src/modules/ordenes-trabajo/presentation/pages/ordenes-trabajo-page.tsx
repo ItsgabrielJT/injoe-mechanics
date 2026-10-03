@@ -10,7 +10,7 @@ import type { Proveedor } from "@/modules/proveedores/domain/entities";
 import { listarProveedores } from "@/modules/proveedores/infrastructure/proveedores-api";
 import type { Servicio } from "@/modules/servicios/domain/entities";
 import { listarServicios } from "@/modules/servicios/infrastructure/servicios-api";
-import { formatoMoneda, type EstadoOrden, type OrdenInput, type OrdenTrabajo, type Tecnico, type TotalesOrdenes } from "@/modules/ordenes-trabajo/domain/entities";
+import { formatoMoneda, type EstadoOrden, type OrdenInput, type OrdenTrabajo, type Tecnico } from "@/modules/ordenes-trabajo/domain/entities";
 import { cerrarOrden, eliminarOrden, guardarOrden, listarOrdenes, listarTecnicos, obtenerOrden } from "@/modules/ordenes-trabajo/infrastructure/ordenes-api";
 import { OrdenTrabajoFormDrawer } from "@/modules/ordenes-trabajo/presentation/forms/orden-trabajo-form-drawer";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
@@ -35,8 +35,6 @@ export function OrdenesTrabajoPage() {
   const { sesion, puntoActivo } = useSesionContext();
   const token = sesion?.accessToken ?? "";
   const [rows, setRows] = useState<OrdenTrabajo[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totales, setTotales] = useState<TotalesOrdenes>({ totalCosto: 0, totalUtilidad: 0, total: 0 });
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
@@ -68,21 +66,20 @@ export function OrdenesTrabajoPage() {
     setCargando(true);
     setError(null);
     try {
-      const respuesta = await listarOrdenes(token, {
-        page: page + 1,
-        size: pageSize,
-        search: debounced || undefined,
-        estado: estado === "all" ? undefined : estado,
-      });
-      setRows(respuesta.data);
-      setTotal(respuesta.total);
-      setTotales(respuesta.totales);
+      const filtros = { search: debounced || undefined, estado: estado === "all" ? undefined : estado };
+      const primera = await listarOrdenes(token, { page: 1, size: 100, ...filtros });
+      const ordenes = [...primera.data];
+      for (let pagina = 2; pagina <= primera.pages; pagina += 1) {
+        const siguiente = await listarOrdenes(token, { page: pagina, size: 100, ...filtros });
+        ordenes.push(...siguiente.data);
+      }
+      setRows(ordenes);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudieron cargar las órdenes");
     } finally {
       setCargando(false);
     }
-  }, [debounced, estado, page, pageSize, token]);
+  }, [debounced, estado, token]);
 
   const cargarCatalogos = useCallback(async () => {
     if (!token) return;
@@ -135,6 +132,18 @@ export function OrdenesTrabajoPage() {
     }
   }
 
+  const totalesDetalle = useMemo(() => {
+    if (!detalle) return { venta: 0, costo: 0, utilidad: 0 };
+    return detalle.items.reduce(
+      (acc, item) => ({
+        venta: acc.venta + item.total,
+        costo: acc.costo + item.precioCompra * item.cantidad,
+        utilidad: acc.utilidad + item.utilidad,
+      }),
+      { venta: 0, costo: 0, utilidad: 0 },
+    );
+  }, [detalle]);
+
   const columns = useMemo<GridColDef[]>(() => [
     { field: "numero", headerName: "Número", minWidth: 120, flex: 0.6 },
     { field: "clienteNombres", headerName: "Cliente", minWidth: 160, flex: 1 },
@@ -154,9 +163,9 @@ export function OrdenesTrabajoPage() {
     },
     { field: "fechaInicio", headerName: "Inicio", minWidth: 150, valueGetter: (_v, row) => fechaCorta(row.fechaInicio) },
     { field: "fechaEntrega", headerName: "Entrega", minWidth: 150, valueGetter: (_v, row) => fechaCorta(row.fechaEntrega) },
-    { field: "totalCosto", headerName: "Costo", minWidth: 110, valueGetter: (_v, row) => formatoMoneda(row.totalCosto) },
-    { field: "totalUtilidad", headerName: "Utilidad", minWidth: 110, valueGetter: (_v, row) => formatoMoneda(row.totalUtilidad) },
-    { field: "total", headerName: "Total", minWidth: 110, valueGetter: (_v, row) => formatoMoneda(row.total) },
+    { field: "totalCosto", headerName: "Costo", minWidth: 110, type: "number", valueFormatter: (value) => formatoMoneda(Number(value ?? 0)) },
+    { field: "totalUtilidad", headerName: "Utilidad", minWidth: 110, type: "number", valueFormatter: (value) => formatoMoneda(Number(value ?? 0)) },
+    { field: "total", headerName: "Total", minWidth: 110, type: "number", valueFormatter: (value) => formatoMoneda(Number(value ?? 0)) },
     {
       field: "acciones",
       headerName: "",
@@ -221,17 +230,14 @@ export function OrdenesTrabajoPage() {
         loading={cargando}
         page={page}
         pageSize={pageSize}
-        rowCount={total}
-        paginationMode="server"
+        rowCount={rows.length}
+        paginationMode="client"
+        filterMode="client"
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         storageKey="mecanicos.ordenes.columnas"
         showToolbar
-        footerTotals={[
-          { label: "Costo", value: formatoMoneda(totales.totalCosto) },
-          { label: "Utilidad", value: formatoMoneda(totales.totalUtilidad) },
-          { label: "Total", value: formatoMoneda(totales.total) },
-        ]}
+        footerTotalFields={["totalCosto", "totalUtilidad", "total"]}
       />
       <OrdenTrabajoFormDrawer
         abierto={drawer}
@@ -293,12 +299,15 @@ export function OrdenesTrabajoPage() {
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr className="font-semibold border-t">
+                        <td className="py-2 pr-3" colSpan={2}>Totales</td>
+                        <td className="py-2 pr-3">{formatoMoneda(totalesDetalle.venta)}</td>
+                        <td className="py-2 pr-3">{formatoMoneda(totalesDetalle.costo)}</td>
+                        <td className="py-2">{formatoMoneda(totalesDetalle.utilidad)}</td>
+                      </tr>
+                    </tfoot>
                   </table>
-                </div>
-                <div className="flex flex-wrap justify-end gap-6 font-medium">
-                  <span>Costo {formatoMoneda(detalle.totalCosto)}</span>
-                  <span>Utilidad {formatoMoneda(detalle.totalUtilidad)}</span>
-                  <span>Total {formatoMoneda(detalle.total)}</span>
                 </div>
               </div>
               {detalle.estado === "EN_PROCESO" && (

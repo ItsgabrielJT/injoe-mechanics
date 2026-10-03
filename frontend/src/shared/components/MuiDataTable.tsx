@@ -5,15 +5,126 @@ import {
   DataGrid,
   GridColDef,
   GridColumnVisibilityModel,
+  GridFooter,
   GridRowSelectionModel,
   GridToolbarColumnsButton,
   GridToolbarContainer,
   GridToolbarFilterButton,
   GridValidRowModel,
+  gridFilteredSortedRowEntriesSelector,
+  useGridApiContext,
 } from "@mui/x-data-grid";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { esES } from "@mui/x-data-grid/locales";
 import { cn } from "@/shared/lib/utils";
+
+const CAMPOS_SIN_TOTAL = new Set(["acciones", "__check__", "__reorder__"]);
+
+function PieConTotales({
+  fields,
+  label,
+}: {
+  fields: string[];
+  label: string;
+}) {
+  const apiRef = useGridApiContext();
+  const [tick, setTick] = React.useState(0);
+
+  React.useEffect(() => {
+    const api = apiRef.current;
+    if (!api?.subscribeEvent) return undefined;
+    const refresh = () => setTick((n) => n + 1);
+    const eventos = [
+      "filteredRowsSetChange",
+      "rowsSet",
+      "columnsChange",
+      "columnOrderChange",
+      "columnVisibilityModelChange",
+      "columnResize",
+      "columnWidthChange",
+    ] as const;
+    const unsuscribir = eventos.map((evento) => {
+      try {
+        return api.subscribeEvent(evento, refresh);
+      } catch {
+        return () => undefined;
+      }
+    });
+    const raiz = api.rootElementRef?.current;
+    const scroller = raiz?.querySelector(".MuiDataGrid-virtualScroller") as HTMLElement | null;
+    scroller?.addEventListener("scroll", refresh, { passive: true });
+    return () => {
+      unsuscribir.forEach((fn) => fn());
+      scroller?.removeEventListener("scroll", refresh);
+    };
+  }, [apiRef]);
+
+  const columnas = apiRef.current?.getVisibleColumns?.() ?? [];
+  const scrollLeft = apiRef.current?.getScrollPosition?.()?.left ?? 0;
+  let filas: GridValidRowModel[] = [];
+  try {
+    filas = gridFilteredSortedRowEntriesSelector(apiRef).map((entrada) => entrada.model);
+  } catch {
+    filas = [];
+  }
+
+  const sumas: Record<string, number> = {};
+  for (const campo of fields) sumas[campo] = 0;
+  for (const fila of filas) {
+    if (fila.__isTotalRow) continue;
+    for (const campo of fields) {
+      const valor = Number(fila[campo]);
+      if (Number.isFinite(valor)) sumas[campo] += valor;
+    }
+  }
+
+  const filaTotal: GridValidRowModel = { id: "__totales__", __isTotalRow: true, ...sumas };
+  const campoEtiqueta = columnas.find(
+    (col) => !fields.includes(col.field) && !CAMPOS_SIN_TOTAL.has(col.field),
+  )?.field;
+
+  void tick;
+
+  return (
+    <>
+      <div className="MuiDataGrid-row--total border-t border-border bg-muted/35 font-semibold">
+        <div className="overflow-hidden">
+          <div className="flex min-h-[48px]" style={{ transform: `translateX(-${scrollLeft}px)` }}>
+            {columnas.map((col) => {
+              let contenido: React.ReactNode = "";
+              if (col.field === campoEtiqueta) {
+                contenido = label;
+              } else if (fields.includes(col.field)) {
+                const valor = filaTotal[col.field];
+                if (col.valueFormatter) {
+                  contenido = col.valueFormatter(valor, filaTotal, col, apiRef);
+                } else if (col.valueGetter) {
+                  contenido = col.valueGetter(valor, filaTotal, col, apiRef);
+                } else {
+                  contenido = valor;
+                }
+              }
+              return (
+                <div
+                  key={col.field}
+                  className="flex items-center px-4 text-sm box-border"
+                  style={{
+                    width: col.computedWidth,
+                    minWidth: col.computedWidth,
+                    maxWidth: col.computedWidth,
+                  }}
+                >
+                  {contenido}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <GridFooter />
+    </>
+  );
+}
 
 const theme = createTheme(
   {
@@ -73,7 +184,8 @@ interface MuiDataTableProps {
   columnVisibilityModel?: GridColumnVisibilityModel;
   onColumnVisibilityModelChange?: (model: GridColumnVisibilityModel) => void;
   mobileHiddenFields?: string[];
-  footerTotals?: { label: string; value: string }[];
+  footerTotalFields?: string[];
+  footerTotalLabel?: string;
 }
 
 export const MuiDataTable: React.FC<MuiDataTableProps> = ({
@@ -100,7 +212,8 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
   columnVisibilityModel,
   onColumnVisibilityModelChange,
   mobileHiddenFields = [],
-  footerTotals,
+  footerTotalFields,
+  footerTotalLabel = "Totales",
 }) => {
   const [compacto, setCompacto] = React.useState(false);
   const [paginationModel, setPaginationModel] = React.useState({
@@ -181,6 +294,15 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
     onColumnVisibilityModelChange?.(model);
   };
 
+  const FooterSlot = React.useMemo(() => {
+    if (!footerTotalFields?.length) return undefined;
+    const campos = footerTotalFields;
+    const etiqueta = footerTotalLabel;
+    return function FooterConTotales() {
+      return <PieConTotales fields={campos} label={etiqueta} />;
+    };
+  }, [footerTotalFields, footerTotalLabel]);
+
   const allRowsSize = Math.max(rowCount ?? rows.length, rows.length, 1);
   const basePageSizeOptions = [10, 25, 50, 100];
   const pageSizeOptions = showAllOption
@@ -202,7 +324,7 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
     <ThemeProvider theme={theme}>
       <div
         className={cn(
-          "w-full min-w-0 flex-1 min-h-[280px] bg-card rounded-xl border border-border/60 shadow-sm overflow-hidden",
+          "w-full min-w-0 flex flex-col flex-1 min-h-[280px] bg-card rounded-xl border border-border/60 shadow-sm overflow-hidden",
           "h-[min(62dvh,650px)] sm:h-[min(64dvh,650px)] lg:h-[min(68dvh,650px)]",
           className,
         )}
@@ -223,16 +345,23 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
           getEstimatedRowHeight={autoRowHeight ? () => 64 : undefined}
           pagination
           paginationMode={paginationMode}
-          filterMode={filterMode ?? (paginationMode === "client" ? "client" : "server")}
+          filterMode={filterMode ?? (paginationMode === "client" || Boolean(footerTotalFields?.length) ? "client" : "server")}
           disableColumnFilter={disableColumnFilter}
           rowCount={rowCount}
           localeText={esES.components.MuiDataGrid.defaultProps.localeText}
           showToolbar={showToolbar}
-          slots={showToolbar ? { toolbar: ToolbarColumnas } : undefined}
+          getRowClassName={(params) => (params.row?.__isTotalRow ? "MuiDataGrid-row--total" : "")}
+          isRowSelectable={(params) => !params.row?.__isTotalRow}
+          slots={{
+            ...(showToolbar ? { toolbar: ToolbarColumnas } : {}),
+            ...(FooterSlot ? { footer: FooterSlot } : {}),
+          }}
           columnVisibilityModel={visibilityEfectiva}
           onColumnVisibilityModelChange={handleVisibilityChange}
           sx={{
             border: "none",
+            flex: 1,
+            minHeight: 0,
             color: "hsl(var(--foreground))",
             fontFamily: "inherit",
             "--DataGrid-containerBackground": "hsl(var(--muted)/0.3)",
@@ -267,6 +396,10 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
             "& .MuiDataGrid-row:hover": {
               backgroundColor: "hsl(16 100% 66% / 0.08)",
             },
+            "& .MuiDataGrid-row--total": {
+              backgroundColor: "hsl(var(--muted)/0.35)",
+              fontWeight: 700,
+            },
             "& .MuiDataGrid-footerContainer": {
               borderTop: "1px solid hsl(var(--border))",
               backgroundColor: "hsl(var(--muted)/0.1)",
@@ -286,16 +419,6 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
             },
           }}
         />
-        {footerTotals && footerTotals.length > 0 && (
-          <div className="flex flex-wrap items-center justify-end gap-6 border-t border-border px-4 py-3 text-sm bg-muted/20">
-            {footerTotals.map((item) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <span className="uppercase tracking-wide text-muted-foreground text-xs font-semibold">{item.label}</span>
-                <span className="font-semibold text-foreground">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </ThemeProvider>
   );
