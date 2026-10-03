@@ -45,6 +45,9 @@ export interface OrdenTrabajo {
   vehiculoModelo: string | null;
   tecnicoNombre: string | null;
   items: ItemOrden[];
+  facturaId: number | null;
+  facturaNumero: string | null;
+  facturada: boolean;
 }
 
 export interface TotalesOrdenes {

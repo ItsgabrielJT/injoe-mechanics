@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
-import { ClipboardList, Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ClipboardList, Eye, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { crearCliente, listarClientes } from "@/modules/clientes/infrastructure/clientes-api";
+import type { Cliente } from "@/modules/clientes/domain/entities";
+import { crearDesdeOrden, listarFormasPago } from "@/modules/facturacion/infrastructure/facturacion-api";
+import type { FormaPago, TipoReceptor } from "@/modules/facturacion/domain/entities";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import type { Bodega, CategoriaProducto, Producto } from "@/modules/inventario/domain/entities";
 import { listarBodegas, listarCategorias, listarProductos } from "@/modules/inventario/infrastructure/inventario-api";
@@ -55,6 +59,12 @@ export function OrdenesTrabajoPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [categorias, setCategorias] = useState<CategoriaProducto[]>([]);
+  const [facturar, setFacturar] = useState<OrdenTrabajo | null>(null);
+  const [receptor, setReceptor] = useState<"cf" | "ot" | "otro">("ot");
+  const [otroClienteId, setOtroClienteId] = useState<number | null>(null);
+  const [nuevoCliente, setNuevoCliente] = useState({ identificacion: "", nombres: "", correo: "" });
+  const [clientesFactura, setClientesFactura] = useState<Cliente[]>([]);
+  const [formasPago, setFormasPago] = useState<FormaPago[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 400);
@@ -115,6 +125,62 @@ export function OrdenesTrabajoPage() {
     setPage(0);
   }, [debounced, estado]);
 
+  async function abrirFacturar(row: OrdenTrabajo) {
+    try {
+      const completa = await obtenerOrden(token, row.id);
+      const [cli, fps] = await Promise.all([
+        listarClientes(token, { page: 1, size: 100 }),
+        listarFormasPago(token),
+      ]);
+      setClientesFactura(cli.data);
+      setFormasPago(fps);
+      setReceptor("ot");
+      setOtroClienteId(null);
+      setNuevoCliente({ identificacion: "", nombres: "", correo: "" });
+      setFacturar(completa);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo preparar la factura");
+    }
+  }
+
+  async function confirmarFactura() {
+    if (!facturar) return;
+    try {
+      let tipo: TipoReceptor = "consumidor_final";
+      let clienteId: number | null = null;
+      if (receptor === "ot") {
+        tipo = "cliente";
+        clienteId = facturar.clienteId;
+      } else if (receptor === "otro") {
+        tipo = "cliente";
+        if (otroClienteId) {
+          clienteId = otroClienteId;
+        } else {
+          const creado = await crearCliente(token, {
+            identificacion: nuevoCliente.identificacion,
+            nombres: nuevoCliente.nombres,
+            correos: [nuevoCliente.correo],
+            tipo_cliente: nuevoCliente.identificacion.length === 13 ? "PERSONA_JURIDICA" : "PERSONA_NATURAL",
+            direcciones: [],
+            telefonos: [],
+            activo: true,
+          });
+          clienteId = creado.id;
+        }
+      }
+      await crearDesdeOrden(token, facturar.id, {
+        tipo_receptor: tipo,
+        cliente_id: clienteId,
+        forma_pago_id: formasPago[0]?.id ?? null,
+      });
+      setFacturar(null);
+      setExito("Factura creada en borrador");
+      await cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo crear la factura");
+    }
+  }
+
   async function abrirDetalle(row: OrdenTrabajo) {
     try {
       setDetalle(await obtenerOrden(token, row.id));
@@ -158,8 +224,13 @@ export function OrdenesTrabajoPage() {
     {
       field: "estado",
       headerName: "Estado",
-      minWidth: 120,
-      valueGetter: (_v, row) => (row.estado === "CERRADA" ? "Cerrada" : "En proceso"),
+      minWidth: 160,
+      renderCell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <span>{row.estado === "CERRADA" ? "Cerrada" : "En proceso"}</span>
+          {row.facturada && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary">Facturada {row.facturaNumero}</span>}
+        </div>
+      ),
     },
     { field: "fechaInicio", headerName: "Inicio", minWidth: 150, valueGetter: (_v, row) => fechaCorta(row.fechaInicio) },
     { field: "fechaEntrega", headerName: "Entrega", minWidth: 150, valueGetter: (_v, row) => fechaCorta(row.fechaEntrega) },
@@ -168,8 +239,8 @@ export function OrdenesTrabajoPage() {
     { field: "total", headerName: "Total", minWidth: 110, type: "number", valueFormatter: (value) => formatoMoneda(Number(value ?? 0)) },
     {
       field: "acciones",
-      headerName: "",
-      width: 150,
+      headerName: "Acciones",
+      width: 210,
       sortable: false,
       filterable: false,
       renderCell: ({ row }) => (
@@ -180,6 +251,9 @@ export function OrdenesTrabajoPage() {
           )}
           {row.estado === "EN_PROCESO" && (
             <Button size="icon" variant="ghost" onClick={() => setEliminar(row)}><Trash2 className="h-4 w-4" /></Button>
+          )}
+          {row.estado === "CERRADA" && !row.facturada && (
+            <Button size="icon" variant="ghost" title="Facturar" aria-label="Facturar" onClick={() => void abrirFacturar(row)}><FileText className="h-4 w-4" /></Button>
           )}
         </div>
       ),
@@ -235,7 +309,7 @@ export function OrdenesTrabajoPage() {
         filterMode="client"
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        storageKey="mecanicos.ordenes.columnas"
+        storageKey="mecanicos.ordenes.columnas.v2"
         showToolbar
         footerTotalFields={["totalCosto", "totalUtilidad", "total"]}
       />
@@ -310,6 +384,11 @@ export function OrdenesTrabajoPage() {
                   </table>
                 </div>
               </div>
+              {detalle.estado === "CERRADA" && !detalle.facturada && (
+                <div className="flex justify-end gap-2 border-t px-6 py-4">
+                  <Button onClick={() => { void abrirFacturar(detalle); setDetalle(null); }}>Facturar</Button>
+                </div>
+              )}
               {detalle.estado === "EN_PROCESO" && (
                 <div className="flex justify-end gap-2 border-t px-6 py-4">
                   <Button variant="outline" onClick={() => { void abrirEdicion(detalle); setDetalle(null); }}>Editar</Button>
@@ -337,6 +416,38 @@ export function OrdenesTrabajoPage() {
           }
         }}
       />
+      {facturar && (
+        <Portal>
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setFacturar(null)} />
+            <div className="relative w-full max-w-lg rounded-2xl bg-card p-6 space-y-4">
+              <h2 className="text-lg font-semibold">¿A nombre de quién desea facturar?</h2>
+              <label className="flex items-center gap-2 text-sm"><input type="radio" checked={receptor === "cf"} onChange={() => setReceptor("cf")} /> Consumidor Final</label>
+              <label className="flex items-center gap-2 text-sm"><input type="radio" checked={receptor === "ot"} onChange={() => setReceptor("ot")} /> {facturar.clienteNombres}{facturar.clienteIdentificacion ? ` - CI ${facturar.clienteIdentificacion}` : ""}</label>
+              <label className="flex items-center gap-2 text-sm"><input type="radio" checked={receptor === "otro"} onChange={() => setReceptor("otro")} /> Otro cliente / empresa</label>
+              {receptor === "otro" && (
+                <div className="space-y-2">
+                  <select className="flex h-10 w-full rounded-md border px-3 text-sm bg-background" value={otroClienteId ?? ""} onChange={(e) => setOtroClienteId(e.target.value ? Number(e.target.value) : null)}>
+                    <option value="">Seleccionar existente</option>
+                    {clientesFactura.map((c) => <option key={c.id} value={c.id}>{c.nombres} {c.identificacion ?? ""}</option>)}
+                  </select>
+                  {!otroClienteId && (
+                    <div className="grid gap-2">
+                      <Input placeholder="Cédula / RUC" value={nuevoCliente.identificacion} onChange={(e) => setNuevoCliente({ ...nuevoCliente, identificacion: e.target.value })} />
+                      <Input placeholder="Nombre" value={nuevoCliente.nombres} onChange={(e) => setNuevoCliente({ ...nuevoCliente, nombres: e.target.value })} />
+                      <Input placeholder="Correo" value={nuevoCliente.correo} onChange={(e) => setNuevoCliente({ ...nuevoCliente, correo: e.target.value })} />
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setFacturar(null)}>Cancelar</Button>
+                <Button onClick={() => void confirmarFactura()}>Crear borrador</Button>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
       <ConfirmDialog
         open={Boolean(cerrar)}
         title="Cerrar orden"

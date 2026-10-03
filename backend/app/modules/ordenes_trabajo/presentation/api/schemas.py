@@ -108,6 +108,9 @@ class OrdenResponse(BaseModel):
     vehiculo_modelo: str | None = None
     tecnico_nombre: str | None = None
     items: list[ItemOrdenResponse] = []
+    factura_id: int | None = None
+    factura_numero: str | None = None
+    facturada: bool = False
     creado_en: datetime | None = None
     actualizado_en: datetime | None = None
 
@@ -139,6 +142,9 @@ class OrdenResponse(BaseModel):
             vehiculo_modelo=orden.vehiculo_modelo,
             tecnico_nombre=orden.tecnico_nombre,
             items=[ItemOrdenResponse.from_domain(item) for item in orden.items],
+            factura_id=orden.factura_id,
+            factura_numero=orden.factura_numero,
+            facturada=orden.facturada,
             creado_en=orden.creado_en,
             actualizado_en=orden.actualizado_en,
         )

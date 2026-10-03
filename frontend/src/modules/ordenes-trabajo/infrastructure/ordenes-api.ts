@@ -66,6 +66,9 @@ interface OrdenDto {
   vehiculo_modelo: string | null;
   tecnico_nombre: string | null;
   items: ItemDto[];
+  factura_id?: number | null;
+  factura_numero?: string | null;
+  facturada?: boolean;
 }
 
 function n(valor: number | string | null | undefined): number {
@@ -118,6 +121,9 @@ function mapOrden(dto: OrdenDto): OrdenTrabajo {
     vehiculoModelo: dto.vehiculo_modelo,
     tecnicoNombre: dto.tecnico_nombre,
     items: (dto.items ?? []).map(mapItem),
+    facturaId: dto.factura_id ?? null,
+    facturaNumero: dto.factura_numero ?? null,
+    facturada: Boolean(dto.facturada),
   };
 }
 

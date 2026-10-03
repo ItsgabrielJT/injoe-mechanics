@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     APP_NAME: str = "INJOE Mecánicos API"
     APP_VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
+    SRI_SIGN_URL: str = "http://localhost:8000/sri"
+    SRI_SIGN_SECRET_KEY: str = "admin123"
+    SRI_ENVIRONMENT: str = "1"
+    SRI_RETRY_INTERVAL_SECONDS: int = 60
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_FROM_NAME: str = "INJOE Mecánicos"
+    SMTP_USE_TLS: bool = True
 
     def cors_origins_list(self) -> list[str]:
         return [origen.strip() for origen in self.CORS_ORIGINS.split(",") if origen.strip()]

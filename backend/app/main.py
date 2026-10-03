@@ -3,8 +3,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from contextlib import asynccontextmanager
+
 from app.modules.acceso.presentation.api.router import router as auth_router
 from app.modules.acceso.presentation.api.router import usuarios_router
+from app.modules.configuracion.domain.exceptions import (
+    DatosEmpresaInvalidos,
+    EmpresaNoEncontrada,
+    PuntoDuplicado,
+    PuntoEnUso,
+    PuntoNoEncontrado,
+)
+from app.modules.configuracion.presentation.api.router import empresa_router, puntos_router
+from app.modules.facturacion.domain.exceptions import (
+    CertificadoNoConfigurado,
+    EnvioSriFallido,
+    FacturaNoEditable,
+    FacturaNoEncontrada,
+    FacturaSinItems,
+    FormaPagoNoEncontrada,
+    OrdenNoFacturable,
+    OrdenYaFacturada,
+    ReceptorInvalido,
+)
+from app.modules.facturacion.infrastructure.persistence import models as facturacion_models  # noqa: F401
+from app.modules.facturacion.infrastructure.scheduler import detener_scheduler, iniciar_scheduler
+from app.modules.facturacion.presentation.api.router import facturas_router, formas_pago_router, formas_pago_sri_router
 from app.modules.clientes.domain.exceptions import (
     ClienteNoEncontrado,
     CorreoRequerido,
@@ -99,9 +123,17 @@ from app.shared.domain.exceptions import (
     UsuarioInactivo,
 )
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    iniciar_scheduler()
+    yield
+    detener_scheduler()
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -173,6 +205,20 @@ CODIGOS_HTTP = {
     ItemInvalido: 400,
     BodegaRequerida: 400,
     ProveedorRequerido: 400,
+    EmpresaNoEncontrada: 404,
+    PuntoNoEncontrado: 404,
+    PuntoDuplicado: 409,
+    PuntoEnUso: 409,
+    DatosEmpresaInvalidos: 400,
+    FacturaNoEncontrada: 404,
+    FacturaNoEditable: 409,
+    FacturaSinItems: 400,
+    CertificadoNoConfigurado: 400,
+    OrdenNoFacturable: 409,
+    OrdenYaFacturada: 409,
+    ReceptorInvalido: 400,
+    FormaPagoNoEncontrada: 404,
+    EnvioSriFallido: 502,
 }
 
 
@@ -197,6 +243,11 @@ app.include_router(producto_precios_router, prefix=settings.API_V1_STR)
 app.include_router(servicio_precios_router, prefix=settings.API_V1_STR)
 app.include_router(ordenes_router, prefix=settings.API_V1_STR)
 app.include_router(usuarios_router, prefix=settings.API_V1_STR)
+app.include_router(empresa_router, prefix=settings.API_V1_STR)
+app.include_router(puntos_router, prefix=settings.API_V1_STR)
+app.include_router(facturas_router, prefix=settings.API_V1_STR)
+app.include_router(formas_pago_router, prefix=settings.API_V1_STR)
+app.include_router(formas_pago_sri_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/salud")

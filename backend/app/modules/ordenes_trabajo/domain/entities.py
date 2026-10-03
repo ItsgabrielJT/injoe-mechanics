@@ -58,6 +58,9 @@ class OrdenTrabajo:
     vehiculo_modelo: str | None = None
     tecnico_nombre: str | None = None
     items: list[OrdenTrabajoItem] = field(default_factory=list)
+    factura_id: int | None = None
+    factura_numero: str | None = None
+    facturada: bool = False
     creado_en: datetime | None = None
     actualizado_en: datetime | None = None
 

@@ -19,6 +19,9 @@ from app.modules.ordenes_trabajo.presentation.api.dependencies import (
     get_obtener_orden_use_case,
     get_tenant,
 )
+from app.modules.facturacion.infrastructure.persistence.repositories import SqlAlchemyFacturaRepository
+from app.modules.facturacion.presentation.api.dependencies import get_factura_repo
+from app.modules.ordenes_trabajo.domain.entities import OrdenTrabajo
 from app.modules.ordenes_trabajo.presentation.api.schemas import (
     OrdenCreateRequest,
     OrdenDataResponse,
@@ -31,10 +34,27 @@ from app.modules.ordenes_trabajo.presentation.api.schemas import (
 ordenes_router = APIRouter(prefix="/ordenes-trabajo", tags=["órdenes de trabajo"])
 
 
+async def _enriquecer_facturas(
+    ordenes: list[OrdenTrabajo],
+    tenant: ContextoTenant,
+    repo: SqlAlchemyFacturaRepository,
+) -> list[OrdenTrabajo]:
+    ids = [orden.id for orden in ordenes if orden.id]
+    mapa = await repo.facturas_por_ordenes(ids, tenant.empresa_id, tenant.punto_emision_id)
+    for orden in ordenes:
+        factura = mapa.get(orden.id or 0)
+        if factura:
+            orden.factura_id = factura.id
+            orden.factura_numero = factura.numero
+            orden.facturada = True
+    return ordenes
+
+
 @ordenes_router.get("/", response_model=OrdenListResponse)
 async def listar_ordenes(
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarOrdenesUseCase, Depends(get_listar_ordenes_use_case)],
+    repo: Annotated[SqlAlchemyFacturaRepository, Depends(get_factura_repo)],
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
     search: str | None = Query(None),
@@ -43,6 +63,7 @@ async def listar_ordenes(
 ) -> OrdenListResponse:
     query = listar_ordenes_query(page, size, search, estado, tecnico_id)
     ordenes, total, totales = await use_case.execute(query, tenant)
+    await _enriquecer_facturas(ordenes, tenant, repo)
     pages = (total + size - 1) // size if size else 1
     return OrdenListResponse(
         data=[OrdenResponse.from_domain(item) for item in ordenes],
@@ -59,8 +80,10 @@ async def obtener_orden(
     orden_id: int,
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ObtenerOrdenUseCase, Depends(get_obtener_orden_use_case)],
+    repo: Annotated[SqlAlchemyFacturaRepository, Depends(get_factura_repo)],
 ) -> OrdenDataResponse:
     orden = await use_case.execute(orden_id, tenant)
+    await _enriquecer_facturas([orden], tenant, repo)
     return OrdenDataResponse(data=OrdenResponse.from_domain(orden), message="Orden obtenida")
 
 

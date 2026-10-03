@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, Briefcase, ClipboardList, LayoutDashboard, Menu, Package, Truck, Users, X } from "lucide-react";
+import { ArrowLeftRight, Briefcase, ClipboardList, FileText, LayoutDashboard, Menu, Package, Settings, Truck, Users, X } from "lucide-react";
 import { SwitcherPunto } from "@/modules/acceso/presentation/components/switcher-punto";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import { Button } from "@/shared/components/ui/button";
@@ -17,6 +17,8 @@ const NAV = [
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/proveedores", label: "Proveedores", icon: Truck },
   { href: "/movimientos", label: "Movimientos", icon: ArrowLeftRight },
+  { href: "/facturacion", label: "Facturación", icon: FileText },
+  { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
 function SidebarContent({
@@ -94,14 +96,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh bg-background flex overflow-x-hidden">
-      <aside className="hidden lg:flex w-72 xl:w-80 shrink-0 border-r border-sidebar-border bg-sidebar p-4 flex-col">
+      <aside className="hidden lg:flex w-72 xl:w-80 shrink-0 border-r border-sidebar-border bg-sidebar p-4 flex-col overflow-y-auto">
         <SidebarContent pathname={pathname} onCerrar={cerrar} />
       </aside>
 
       {menuAbierto && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenuAbierto(false)} />
-          <aside className="relative h-full w-[min(20rem,86vw)] bg-sidebar p-4 flex flex-col shadow-elegant">
+          <aside className="relative h-full w-[min(20rem,86vw)] bg-sidebar p-4 flex flex-col overflow-y-auto shadow-elegant">
             <SidebarContent
               pathname={pathname}
               onNavigate={() => setMenuAbierto(false)}
