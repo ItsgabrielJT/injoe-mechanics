@@ -6,7 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.clientes.infrastructure.persistence.models import ClienteModel
-from app.modules.facturacion.application.dto import ListarFacturasQuery
+from app.modules.facturacion.application.dto import (
+    EstadisticasFactura,
+    EstadoEstadistica,
+    ImpuestoEstadistica,
+    ListarFacturasQuery,
+    TotalesFactura,
+)
 from app.modules.facturacion.domain.entities import (
     EstadoFactura,
     Factura,
@@ -22,6 +28,7 @@ from app.modules.facturacion.infrastructure.persistence.models import (
     FormaPagoSriModel,
 )
 from app.modules.identidad.infrastructure.persistence.models import EmpresaModel, PuntoEmisionModel
+from app.modules.inventario.infrastructure.persistence.models import BodegaModel, ProductoModel
 
 
 def _item(model: FacturaItemModel) -> FacturaItem:
@@ -37,6 +44,7 @@ def _item(model: FacturaItemModel) -> FacturaItem:
         aplica_iva=model.aplica_iva,
         tipo_impuesto=model.tipo_impuesto,
         bodega_id=model.bodega_id,
+        bodega_nombre=None,
         subtotal=Decimal(model.subtotal),
         iva_amount=Decimal(model.iva_amount),
         ice_amount=Decimal(model.ice_amount),
@@ -55,6 +63,19 @@ def _correo_cliente(cliente: ClienteModel | None) -> str | None:
         if 0 <= idx < len(cliente.correos):
             return cliente.correos[idx]
         return cliente.correos[0]
+    return None
+
+
+def _telefono_cliente(cliente: ClienteModel | None) -> str | None:
+    if cliente is None:
+        return None
+    if cliente.telefono_fiscal:
+        return cliente.telefono_fiscal
+    if cliente.telefonos:
+        idx = cliente.indice_telefono_principal or 0
+        if 0 <= idx < len(cliente.telefonos):
+            return cliente.telefonos[idx]
+        return cliente.telefonos[0]
     return None
 
 
@@ -95,6 +116,7 @@ def _factura(model: FacturaModel, cliente: ClienteModel | None = None) -> Factur
         cliente_identificacion=cliente.identificacion if cliente else None,
         cliente_correo=_correo_cliente(cliente),
         cliente_direccion=(cliente.direccion_fiscal or (cliente.direcciones[0] if cliente and cliente.direcciones else None)) if cliente else None,
+        cliente_telefono=_telefono_cliente(cliente),
         forma_pago_nombre=model.forma_pago.nombre if model.forma_pago else None,
         forma_pago_sri_codigo=(
             model.forma_pago.forma_pago_sri.codigo
@@ -117,10 +139,64 @@ class SqlAlchemyFacturaRepository:
             FacturaModel.punto_emision_id == punto_emision_id,
         )
 
+    def _filtros(self, empresa_id: int, punto_emision_id: int, query: ListarFacturasQuery):
+        filtros = [*self._alcance(empresa_id, punto_emision_id)]
+        if query.estado:
+            filtros.append(FacturaModel.estado == query.estado)
+        if query.cliente_id:
+            filtros.append(FacturaModel.cliente_id == query.cliente_id)
+        if query.fecha_desde:
+            filtros.append(FacturaModel.fecha_emision >= query.fecha_desde)
+        if query.fecha_hasta:
+            filtros.append(FacturaModel.fecha_emision <= query.fecha_hasta)
+        if query.search:
+            like = f"%{query.search.strip()}%"
+            cliente_ids = select(ClienteModel.id).where(
+                ClienteModel.empresa_id == empresa_id,
+                ClienteModel.punto_emision_id == punto_emision_id,
+                or_(
+                    ClienteModel.nombres.ilike(like),
+                    ClienteModel.identificacion.ilike(like),
+                    ClienteModel.razon_social.ilike(like),
+                ),
+            )
+            condiciones = [
+                FacturaModel.numero.ilike(like),
+                FacturaModel.clave_acceso.ilike(like),
+                FacturaModel.cliente_id.in_(cliente_ids),
+            ]
+            if "consumidor" in query.search.strip().lower():
+                condiciones.append(FacturaModel.tipo_receptor == TipoReceptor.CONSUMIDOR_FINAL)
+            filtros.append(or_(*condiciones))
+        return filtros
+
     async def _cliente(self, cliente_id: int | None) -> ClienteModel | None:
         if not cliente_id:
             return None
         return await self.session.get(ClienteModel, cliente_id)
+
+    async def _nombres_bodega(self, facturas: list[Factura]) -> list[Factura]:
+        ids_bodega = {item.bodega_id for factura in facturas for item in factura.items if item.bodega_id}
+        ids_producto = {item.producto_id for factura in facturas for item in factura.items if item.producto_id}
+        nombres: dict[int, str] = {}
+        inventario: dict[int, bool] = {}
+        if ids_bodega:
+            filas = (await self.session.execute(select(BodegaModel.id, BodegaModel.nombre).where(BodegaModel.id.in_(ids_bodega)))).all()
+            nombres = {fila.id: fila.nombre for fila in filas}
+        if ids_producto:
+            filas = (
+                await self.session.execute(
+                    select(ProductoModel.id, ProductoModel.aplica_inventario).where(ProductoModel.id.in_(ids_producto))
+                )
+            ).all()
+            inventario = {fila.id: bool(fila.aplica_inventario) for fila in filas}
+        for factura in facturas:
+            for item in factura.items:
+                if item.bodega_id:
+                    item.bodega_nombre = nombres.get(item.bodega_id)
+                if item.producto_id:
+                    item.aplica_inventario = inventario.get(item.producto_id, False)
+        return facturas
 
     async def obtener(self, factura_id: int, empresa_id: int, punto_emision_id: int) -> Factura | None:
         resultado = await self.session.execute(
@@ -131,7 +207,8 @@ class SqlAlchemyFacturaRepository:
         modelo = resultado.scalars().first()
         if modelo is None:
             return None
-        return _factura(modelo, await self._cliente(modelo.cliente_id))
+        factura = _factura(modelo, await self._cliente(modelo.cliente_id))
+        return (await self._nombres_bodega([factura]))[0]
 
     async def obtener_por_orden(self, orden_id: int, empresa_id: int, punto_emision_id: int) -> Factura | None:
         resultado = await self.session.execute(
@@ -146,24 +223,13 @@ class SqlAlchemyFacturaRepository:
         modelo = resultado.scalars().first()
         if modelo is None:
             return None
-        return _factura(modelo, await self._cliente(modelo.cliente_id))
+        factura = _factura(modelo, await self._cliente(modelo.cliente_id))
+        return (await self._nombres_bodega([factura]))[0]
 
     async def listar(
         self, empresa_id: int, punto_emision_id: int, query: ListarFacturasQuery
     ) -> tuple[list[Factura], int]:
-        filtros = [*self._alcance(empresa_id, punto_emision_id)]
-        if query.estado:
-            filtros.append(FacturaModel.estado == query.estado)
-        if query.cliente_id:
-            filtros.append(FacturaModel.cliente_id == query.cliente_id)
-        if query.search:
-            like = f"%{query.search.strip()}%"
-            filtros.append(
-                or_(
-                    FacturaModel.numero.ilike(like),
-                    FacturaModel.clave_acceso.ilike(like),
-                )
-            )
+        filtros = self._filtros(empresa_id, punto_emision_id, query)
         total = await self.session.scalar(select(func.count()).select_from(FacturaModel).where(*filtros)) or 0
         resultado = await self.session.execute(
             select(FacturaModel)
@@ -181,7 +247,121 @@ class SqlAlchemyFacturaRepository:
                 row.id: row
                 for row in (await self.session.execute(select(ClienteModel).where(ClienteModel.id.in_(ids)))).scalars()
             }
-        return [_factura(modelo, clientes.get(modelo.cliente_id) if modelo.cliente_id else None) for modelo in modelos], total
+        facturas = [_factura(modelo, clientes.get(modelo.cliente_id) if modelo.cliente_id else None) for modelo in modelos]
+        return await self._nombres_bodega(facturas), total
+
+    async def totales(self, empresa_id: int, punto_emision_id: int, query: ListarFacturasQuery) -> TotalesFactura:
+        filtros = self._filtros(empresa_id, punto_emision_id, query)
+        subtotal_expr = (
+            func.coalesce(FacturaModel.subtotal_15, 0)
+            + func.coalesce(FacturaModel.subtotal_5, 0)
+            + func.coalesce(FacturaModel.subtotal_0, 0)
+            + func.coalesce(FacturaModel.subtotal_objeto, 0)
+            + func.coalesce(FacturaModel.subtotal_exento, 0)
+        )
+        fila = (
+            await self.session.execute(
+                select(
+                    func.count(FacturaModel.id),
+                    func.coalesce(func.sum(subtotal_expr), 0),
+                    func.coalesce(func.sum(FacturaModel.iva_15), 0),
+                    func.coalesce(func.sum(FacturaModel.iva_5), 0),
+                    func.coalesce(func.sum(FacturaModel.total), 0),
+                ).where(*filtros)
+            )
+        ).one()
+        return TotalesFactura(
+            cantidad=int(fila[0] or 0),
+            subtotal=Decimal(str(fila[1] or 0)),
+            iva_15=Decimal(str(fila[2] or 0)),
+            iva_5=Decimal(str(fila[3] or 0)),
+            iva_0=Decimal("0"),
+            total=Decimal(str(fila[4] or 0)),
+        )
+
+    async def estadisticas(
+        self, empresa_id: int, punto_emision_id: int, query: ListarFacturasQuery
+    ) -> EstadisticasFactura:
+        filtros = self._filtros(empresa_id, punto_emision_id, query)
+        subtotal_expr = (
+            func.coalesce(FacturaModel.subtotal_15, 0)
+            + func.coalesce(FacturaModel.subtotal_5, 0)
+            + func.coalesce(FacturaModel.subtotal_0, 0)
+            + func.coalesce(FacturaModel.subtotal_objeto, 0)
+            + func.coalesce(FacturaModel.subtotal_exento, 0)
+        )
+        filas = (
+            await self.session.execute(
+                select(
+                    FacturaModel.estado,
+                    func.count(FacturaModel.id),
+                    func.coalesce(func.sum(subtotal_expr), 0),
+                    func.coalesce(func.sum(FacturaModel.iva_15), 0),
+                    func.coalesce(func.sum(FacturaModel.iva_5), 0),
+                    func.coalesce(func.sum(FacturaModel.subtotal_0), 0),
+                    func.coalesce(func.sum(FacturaModel.subtotal_objeto), 0),
+                    func.coalesce(func.sum(FacturaModel.subtotal_exento), 0),
+                    func.coalesce(func.sum(FacturaModel.total), 0),
+                )
+                .where(*filtros)
+                .group_by(FacturaModel.estado)
+            )
+        ).all()
+        mapa: dict[EstadoFactura, EstadoEstadistica] = {}
+        for estado, cantidad, subtotal, iva_15, iva_5, sub_0, objeto, exento, total in filas:
+            try:
+                clave = EstadoFactura(estado)
+            except ValueError:
+                continue
+            mapa[clave] = EstadoEstadistica(
+                estado=clave,
+                cantidad=int(cantidad or 0),
+                subtotal=Decimal(str(subtotal or 0)),
+                iva_15=Decimal(str(iva_15 or 0)),
+                iva_5=Decimal(str(iva_5 or 0)),
+                iva_0=Decimal("0"),
+                total=Decimal(str(total or 0)),
+            )
+        for estado in EstadoFactura:
+            mapa.setdefault(estado, EstadoEstadistica(estado=estado))
+        numeros = (
+            await self.session.execute(
+                select(FacturaModel.estado, FacturaModel.numero)
+                .where(*filtros)
+                .order_by(FacturaModel.fecha_emision.desc(), FacturaModel.id.desc())
+            )
+        ).all()
+        for estado, numero in numeros:
+            try:
+                clave = EstadoFactura(estado)
+            except ValueError:
+                continue
+            if numero:
+                mapa[clave].numeros.append(str(numero))
+        impuestos = (
+            await self.session.execute(
+                select(
+                    func.coalesce(func.sum(FacturaModel.subtotal_0 + FacturaModel.subtotal_objeto + FacturaModel.subtotal_exento), 0),
+                    func.coalesce(func.sum(FacturaModel.subtotal_5), 0),
+                    func.coalesce(func.sum(FacturaModel.iva_5), 0),
+                    func.coalesce(func.sum(FacturaModel.subtotal_15), 0),
+                    func.coalesce(func.sum(FacturaModel.iva_15), 0),
+                ).where(*filtros)
+            )
+        ).one()
+        s0, s5, i5, s15, i15 = (Decimal(str(valor or 0)) for valor in impuestos)
+        totales = await self.totales(empresa_id, punto_emision_id, query)
+        return EstadisticasFactura(
+            fecha_desde=query.fecha_desde,
+            fecha_hasta=query.fecha_hasta,
+            por_estado=[mapa[estado] for estado in EstadoFactura],
+            totales=totales,
+            por_impuesto=[
+                ImpuestoEstadistica(tasa=0, subtotal=s0, iva=Decimal("0"), total=s0),
+                ImpuestoEstadistica(tasa=5, subtotal=s5, iva=i5, total=s5 + i5),
+                ImpuestoEstadistica(tasa=15, subtotal=s15, iva=i15, total=s15 + i15),
+            ],
+        )
 
     async def facturas_por_ordenes(self, orden_ids: list[int], empresa_id: int, punto_emision_id: int) -> dict[int, Factura]:
         if not orden_ids:

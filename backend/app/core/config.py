@@ -1,9 +1,13 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         extra="ignore",
         case_sensitive=False,
     )
@@ -30,8 +34,9 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
-    SMTP_FROM_NAME: str = "INJOE Mecánicos"
+    SMTP_FROM_NAME: str = "INJOE Mechanics"
     SMTP_USE_TLS: bool = True
+    PDF_RUC_PROVEEDOR: str = "1722879176001"
 
     def cors_origins_list(self) -> list[str]:
         return [origen.strip() for origen in self.CORS_ORIGINS.split(",") if origen.strip()]

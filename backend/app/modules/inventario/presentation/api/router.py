@@ -232,8 +232,11 @@ async def listar_productos(
     search: str | None = Query(None),
     categoria_id: int | None = Query(None),
     activo: bool | None = Query(None),
+    aplica_inventario: bool | None = Query(None),
 ) -> ProductoListResponse:
-    productos, total = await use_case.execute(listar_productos_query(page, size, search, categoria_id, activo), tenant)
+    productos, total = await use_case.execute(
+        listar_productos_query(page, size, search, categoria_id, activo, aplica_inventario), tenant
+    )
     return ProductoListResponse(
         data=[ProductoResponse.from_domain(item) for item in productos],
         total=total,

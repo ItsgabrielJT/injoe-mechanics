@@ -289,7 +289,14 @@ export async function eliminarBodega(token: string, id: number): Promise<void> {
 
 export async function listarProductos(
   token: string,
-  params: { page: number; size: number; search?: string; categoria_id?: number; activo?: boolean },
+  params: {
+    page: number;
+    size: number;
+    search?: string;
+    categoria_id?: number;
+    activo?: boolean;
+    aplica_inventario?: boolean;
+  },
 ): Promise<ListaPaginada<Producto>> {
   const dto = await httpClient<ListaApi<ProductoDto>>(`/productos/?${queryLista(params)}`, { token });
   return { ...dto, data: dto.data.map(mapProducto) };

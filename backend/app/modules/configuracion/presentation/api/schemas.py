@@ -49,6 +49,7 @@ class EmpresaResponse(BaseModel):
     moneda: str
     idioma: str
     zona_horaria: str
+    ruta_logo: str | None = None
 
     @classmethod
     def from_domain(cls, empresa: EmpresaConfig) -> "EmpresaResponse":

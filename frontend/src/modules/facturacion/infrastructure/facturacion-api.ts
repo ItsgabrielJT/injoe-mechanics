@@ -1,6 +1,15 @@
 import { httpClient } from "@/shared/infrastructure/http/http-client";
 import type { TipoImpuesto } from "@/modules/inventario/domain/entities";
-import type { EstadoFactura, Factura, FacturaInput, FormaPago, ItemFactura, TipoReceptor } from "@/modules/facturacion/domain/entities";
+import type {
+  EstadoFactura,
+  EstadisticasFactura,
+  Factura,
+  FacturaInput,
+  FormaPago,
+  ItemFactura,
+  TipoReceptor,
+  TotalesFactura,
+} from "@/modules/facturacion/domain/entities";
 
 interface ItemDto {
   id: number;
@@ -14,6 +23,8 @@ interface ItemDto {
   aplica_iva: boolean;
   tipo_impuesto: TipoImpuesto;
   bodega_id?: number | null;
+  bodega_nombre?: string | null;
+  aplica_inventario?: boolean;
   subtotal: number | string;
   iva_amount: number | string;
   total: number | string;
@@ -34,6 +45,7 @@ interface FacturaDto {
   clave_acceso: string | null;
   xml_content: string | null;
   reason_error: string | null;
+  numero_autorizacion?: string | null;
   subtotal_15: number | string;
   subtotal_5: number | string;
   subtotal_0: number | string;
@@ -41,6 +53,8 @@ interface FacturaDto {
   subtotal_exento: number | string;
   iva_15: number | string;
   iva_5: number | string;
+  iva_0?: number | string;
+  subtotal?: number | string;
   descuento: number | string;
   total: number | string;
   notas: string | null;
@@ -48,7 +62,10 @@ interface FacturaDto {
   cliente_nombres: string | null;
   cliente_identificacion: string | null;
   cliente_correo: string | null;
+  cliente_direccion?: string | null;
+  cliente_telefono?: string | null;
   forma_pago_nombre: string | null;
+  forma_pago_sri_codigo?: string | null;
   items: ItemDto[];
 }
 
@@ -69,6 +86,8 @@ function mapItem(dto: ItemDto): ItemFactura {
     aplicaIva: dto.aplica_iva,
     tipoImpuesto: dto.tipo_impuesto,
     bodegaId: dto.bodega_id ?? null,
+    bodegaNombre: dto.bodega_nombre ?? null,
+    aplicaInventario: dto.aplica_inventario ?? Boolean(dto.producto_id),
     subtotal: n(dto.subtotal),
     ivaAmount: n(dto.iva_amount),
     total: n(dto.total),
@@ -91,6 +110,7 @@ function mapFactura(dto: FacturaDto): Factura {
     claveAcceso: dto.clave_acceso,
     xmlContent: dto.xml_content,
     reasonError: dto.reason_error,
+    numeroAutorizacion: dto.numero_autorizacion ?? null,
     subtotal15: n(dto.subtotal_15),
     subtotal5: n(dto.subtotal_5),
     subtotal0: n(dto.subtotal_0),
@@ -98,6 +118,10 @@ function mapFactura(dto: FacturaDto): Factura {
     subtotalExento: n(dto.subtotal_exento),
     iva15: n(dto.iva_15),
     iva5: n(dto.iva_5),
+    iva0: n(dto.iva_0),
+    subtotal: dto.subtotal != null && dto.subtotal !== ""
+      ? n(dto.subtotal)
+      : n(dto.subtotal_15) + n(dto.subtotal_5) + n(dto.subtotal_0) + n(dto.subtotal_objeto) + n(dto.subtotal_exento),
     descuento: n(dto.descuento),
     total: n(dto.total),
     notas: dto.notas,
@@ -105,19 +129,70 @@ function mapFactura(dto: FacturaDto): Factura {
     clienteNombres: dto.cliente_nombres,
     clienteIdentificacion: dto.cliente_identificacion,
     clienteCorreo: dto.cliente_correo,
+    clienteDireccion: dto.cliente_direccion ?? null,
+    clienteTelefono: dto.cliente_telefono ?? null,
     formaPagoNombre: dto.forma_pago_nombre,
+    formaPagoSriCodigo: dto.forma_pago_sri_codigo ?? null,
     items: (dto.items || []).map(mapItem),
   };
 }
 
-export async function listarFacturas(token: string, params: { page?: number; size?: number; search?: string; estado?: EstadoFactura } = {}) {
+export interface FiltrosFactura {
+  page?: number;
+  size?: number;
+  search?: string;
+  estado?: EstadoFactura;
+  cliente_id?: number;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+}
+
+function queryFacturas(params: FiltrosFactura): URLSearchParams {
   const query = new URLSearchParams();
   if (params.page) query.set("page", String(params.page));
   if (params.size) query.set("size", String(params.size));
   if (params.search) query.set("search", params.search);
   if (params.estado) query.set("estado", params.estado);
-  const resp = await httpClient<{ data: FacturaDto[]; total: number; page: number; size: number; pages: number }>(`/facturas/?${query.toString()}`, { token });
-  return { ...resp, data: resp.data.map(mapFactura) };
+  if (params.cliente_id) query.set("cliente_id", String(params.cliente_id));
+  if (params.fecha_desde) query.set("fecha_desde", params.fecha_desde);
+  if (params.fecha_hasta) query.set("fecha_hasta", params.fecha_hasta);
+  return query;
+}
+
+function mapTotales(dto?: { cantidad: number; subtotal: number | string; iva_15: number | string; iva_5: number | string; iva_0: number | string; total: number | string } | null): TotalesFactura {
+  return {
+    cantidad: Number(dto?.cantidad || 0),
+    subtotal: n(dto?.subtotal),
+    iva15: n(dto?.iva_15),
+    iva5: n(dto?.iva_5),
+    iva0: n(dto?.iva_0),
+    total: n(dto?.total),
+  };
+}
+
+export async function listarFacturas(token: string, params: FiltrosFactura = {}) {
+  const resp = await httpClient<{
+    data: FacturaDto[];
+    total: number;
+    page: number;
+    size: number;
+    pages: number;
+    totales?: { cantidad: number; subtotal: number | string; iva_15: number | string; iva_5: number | string; iva_0: number | string; total: number | string };
+  }>(`/facturas/?${queryFacturas(params).toString()}`, { token });
+  return { ...resp, data: resp.data.map(mapFactura), totales: mapTotales(resp.totales) };
+}
+
+export async function listarFacturasReporte(token: string, params: Omit<FiltrosFactura, "page" | "size"> = {}): Promise<Factura[]> {
+  const filas: Factura[] = [];
+  let page = 1;
+  let pages = 1;
+  while (page <= pages) {
+    const resp = await listarFacturas(token, { ...params, page, size: 200 });
+    filas.push(...resp.data);
+    pages = resp.pages || 1;
+    page += 1;
+  }
+  return filas;
 }
 
 export async function obtenerFactura(token: string, id: number): Promise<Factura> {
@@ -141,6 +216,51 @@ export async function eliminarFactura(token: string, id: number): Promise<void> 
 export async function enviarSri(token: string, id: number): Promise<Factura> {
   const resp = await httpClient<{ data: FacturaDto }>(`/facturas/${id}/enviar-sri`, { method: "POST", token });
   return mapFactura(resp.data);
+}
+
+export async function cancelarFactura(token: string, id: number): Promise<Factura> {
+  const resp = await httpClient<{ data: FacturaDto }>(`/facturas/${id}/cancelar`, { method: "POST", token });
+  return mapFactura(resp.data);
+}
+
+export async function obtenerEstadisticas(
+  token: string,
+  params: { fecha_desde?: string; fecha_hasta?: string; cliente_id?: number } = {},
+): Promise<EstadisticasFactura> {
+  const query = new URLSearchParams();
+  if (params.fecha_desde) query.set("fecha_desde", params.fecha_desde);
+  if (params.fecha_hasta) query.set("fecha_hasta", params.fecha_hasta);
+  if (params.cliente_id) query.set("cliente_id", String(params.cliente_id));
+  const resp = await httpClient<{
+    data: {
+      fecha_desde: string | null;
+      fecha_hasta: string | null;
+      por_estado: Array<{ estado: EstadoFactura; cantidad: number; subtotal: number | string; iva_15: number | string; iva_5: number | string; iva_0: number | string; total: number | string; numeros: string[] }>;
+      totales: { cantidad: number; subtotal: number | string; iva_15: number | string; iva_5: number | string; iva_0: number | string; total: number | string };
+      por_impuesto: Array<{ tasa: number; subtotal: number | string; iva: number | string; total: number | string }>;
+    };
+  }>(`/facturas/estadisticas?${query.toString()}`, { token });
+  return {
+    fechaDesde: resp.data.fecha_desde,
+    fechaHasta: resp.data.fecha_hasta,
+    porEstado: resp.data.por_estado.map((fila) => ({
+      estado: fila.estado,
+      cantidad: Number(fila.cantidad || 0),
+      subtotal: n(fila.subtotal),
+      iva15: n(fila.iva_15),
+      iva5: n(fila.iva_5),
+      iva0: n(fila.iva_0),
+      total: n(fila.total),
+      numeros: fila.numeros || [],
+    })),
+    totales: mapTotales(resp.data.totales),
+    porImpuesto: resp.data.por_impuesto.map((fila) => ({
+      tasa: fila.tasa,
+      subtotal: n(fila.subtotal),
+      iva: n(fila.iva),
+      total: n(fila.total),
+    })),
+  };
 }
 
 export async function crearDesdeOrden(token: string, ordenId: number, body: { tipo_receptor: TipoReceptor; cliente_id?: number | null; forma_pago_id?: number | null }): Promise<Factura> {

@@ -6,6 +6,10 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.modules.facturacion.application.use_cases.gestionar_facturas import ReintentarSriUseCase
 from app.modules.facturacion.infrastructure.persistence.repositories import SqlAlchemyFacturaRepository
+from app.modules.inventario.infrastructure.persistence.repositories import (
+    SqlAlchemyMovimientoRepository,
+    SqlAlchemyProductoRepository,
+)
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -14,7 +18,11 @@ scheduler = AsyncIOScheduler()
 async def reintentar_facturas_sri() -> None:
     async with SessionLocal() as session:
         repo = SqlAlchemyFacturaRepository(session)
-        use_case = ReintentarSriUseCase(repo)
+        use_case = ReintentarSriUseCase(
+            repo,
+            SqlAlchemyProductoRepository(session),
+            SqlAlchemyMovimientoRepository(session),
+        )
         pendientes = await repo.listar_pendientes_reintento()
         for factura_id, empresa_id, punto_id in pendientes:
             try:

@@ -16,6 +16,7 @@ class EmpresaConfig:
     moneda: str
     idioma: str
     zona_horaria: str
+    ruta_logo: str | None = None
 
 
 @dataclass

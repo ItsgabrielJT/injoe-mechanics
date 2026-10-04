@@ -5,9 +5,13 @@ from pydantic import BaseModel, Field
 
 from app.modules.facturacion.application.dto import (
     CrearDesdeOrdenCommand,
+    EstadisticasFactura,
+    EstadoEstadistica,
     GuardarFacturaCommand,
+    ImpuestoEstadistica,
     ItemFacturaCommand,
     ListarFacturasQuery,
+    TotalesFactura,
 )
 from app.modules.facturacion.domain.entities import EstadoFactura, Factura, FacturaItem, FormaPago, FormaPagoSri, TipoReceptor
 from app.modules.inventario.domain.entities import TipoImpuesto
@@ -68,6 +72,8 @@ class ItemFacturaResponse(BaseModel):
     aplica_iva: bool
     tipo_impuesto: TipoImpuesto
     bodega_id: int | None = None
+    bodega_nombre: str | None = None
+    aplica_inventario: bool = False
     subtotal: Decimal
     iva_amount: Decimal
     total: Decimal
@@ -86,6 +92,8 @@ class ItemFacturaResponse(BaseModel):
             aplica_iva=item.aplica_iva,
             tipo_impuesto=item.tipo_impuesto,
             bodega_id=item.bodega_id,
+            bodega_nombre=item.bodega_nombre,
+            aplica_inventario=item.aplica_inventario,
             subtotal=item.subtotal,
             iva_amount=item.iva_amount,
             total=item.total,
@@ -117,6 +125,8 @@ class FacturaResponse(BaseModel):
     subtotal_exento: Decimal
     iva_15: Decimal
     iva_5: Decimal
+    iva_0: Decimal = Decimal("0")
+    subtotal: Decimal = Decimal("0")
     descuento: Decimal
     total: Decimal
     notas: str | None = None
@@ -124,7 +134,10 @@ class FacturaResponse(BaseModel):
     cliente_nombres: str | None = None
     cliente_identificacion: str | None = None
     cliente_correo: str | None = None
+    cliente_direccion: str | None = None
+    cliente_telefono: str | None = None
     forma_pago_nombre: str | None = None
+    forma_pago_sri_codigo: str | None = None
     items: list[ItemFacturaResponse] = []
     creado_en: datetime | None = None
 
@@ -155,6 +168,8 @@ class FacturaResponse(BaseModel):
             subtotal_exento=factura.subtotal_exento,
             iva_15=factura.iva_15,
             iva_5=factura.iva_5,
+            iva_0=Decimal("0"),
+            subtotal=factura.subtotal,
             descuento=factura.descuento,
             total=factura.total,
             notas=factura.notas,
@@ -162,7 +177,10 @@ class FacturaResponse(BaseModel):
             cliente_nombres=factura.cliente_nombres,
             cliente_identificacion=factura.cliente_identificacion,
             cliente_correo=factura.cliente_correo,
+            cliente_direccion=factura.cliente_direccion,
+            cliente_telefono=factura.cliente_telefono,
             forma_pago_nombre=factura.forma_pago_nombre,
+            forma_pago_sri_codigo=factura.forma_pago_sri_codigo,
             items=[ItemFacturaResponse.from_domain(item) for item in factura.items],
             creado_en=factura.creado_en,
         )
@@ -173,13 +191,92 @@ class FacturaDataResponse(BaseModel):
     message: str
 
 
+class FacturaTotalesResponse(BaseModel):
+    cantidad: int
+    subtotal: Decimal
+    iva_15: Decimal
+    iva_5: Decimal
+    iva_0: Decimal
+    total: Decimal
+
+    @classmethod
+    def from_domain(cls, totales: TotalesFactura) -> "FacturaTotalesResponse":
+        return cls(
+            cantidad=totales.cantidad,
+            subtotal=totales.subtotal,
+            iva_15=totales.iva_15,
+            iva_5=totales.iva_5,
+            iva_0=totales.iva_0,
+            total=totales.total,
+        )
+
+
 class FacturaListResponse(BaseModel):
     data: list[FacturaResponse]
     total: int
     page: int
     size: int
     pages: int
+    totales: FacturaTotalesResponse | None = None
     message: str = "Facturas"
+
+
+class EstadoEstadisticaResponse(BaseModel):
+    estado: EstadoFactura
+    cantidad: int
+    subtotal: Decimal
+    iva_15: Decimal
+    iva_5: Decimal
+    iva_0: Decimal
+    total: Decimal
+    numeros: list[str] = []
+
+    @classmethod
+    def from_domain(cls, fila: EstadoEstadistica) -> "EstadoEstadisticaResponse":
+        return cls(
+            estado=fila.estado,
+            cantidad=fila.cantidad,
+            subtotal=fila.subtotal,
+            iva_15=fila.iva_15,
+            iva_5=fila.iva_5,
+            iva_0=fila.iva_0,
+            total=fila.total,
+            numeros=fila.numeros,
+        )
+
+
+class ImpuestoEstadisticaResponse(BaseModel):
+    tasa: int
+    subtotal: Decimal
+    iva: Decimal
+    total: Decimal
+
+    @classmethod
+    def from_domain(cls, fila: ImpuestoEstadistica) -> "ImpuestoEstadisticaResponse":
+        return cls(tasa=fila.tasa, subtotal=fila.subtotal, iva=fila.iva, total=fila.total)
+
+
+class EstadisticasFacturaResponse(BaseModel):
+    fecha_desde: date | None = None
+    fecha_hasta: date | None = None
+    por_estado: list[EstadoEstadisticaResponse]
+    totales: FacturaTotalesResponse
+    por_impuesto: list[ImpuestoEstadisticaResponse]
+
+    @classmethod
+    def from_domain(cls, data: EstadisticasFactura) -> "EstadisticasFacturaResponse":
+        return cls(
+            fecha_desde=data.fecha_desde,
+            fecha_hasta=data.fecha_hasta,
+            por_estado=[EstadoEstadisticaResponse.from_domain(fila) for fila in data.por_estado],
+            totales=FacturaTotalesResponse.from_domain(data.totales),
+            por_impuesto=[ImpuestoEstadisticaResponse.from_domain(fila) for fila in data.por_impuesto],
+        )
+
+
+class EstadisticasDataResponse(BaseModel):
+    data: EstadisticasFacturaResponse
+    message: str = "Estadísticas de facturas"
 
 
 class FormaPagoResponse(BaseModel):
@@ -218,6 +315,20 @@ class FormaPagoSriResponse(BaseModel):
 
 
 def listar_facturas_query(
-    page: int, size: int, search: str | None, estado: EstadoFactura | None, cliente_id: int | None
+    page: int,
+    size: int,
+    search: str | None,
+    estado: EstadoFactura | None,
+    cliente_id: int | None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
 ) -> ListarFacturasQuery:
-    return ListarFacturasQuery(page=page, size=size, search=search, estado=estado, cliente_id=cliente_id)
+    return ListarFacturasQuery(
+        page=page,
+        size=size,
+        search=search,
+        estado=estado,
+        cliente_id=cliente_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )

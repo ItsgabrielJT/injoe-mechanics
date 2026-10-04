@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -5,9 +6,11 @@ from fastapi.responses import PlainTextResponse
 
 from app.modules.facturacion.application.dto import ContextoTenant
 from app.modules.facturacion.application.use_cases.gestionar_facturas import (
+    CancelarFacturaUseCase,
     CrearDesdeOrdenUseCase,
     EliminarFacturaUseCase,
     EnviarSriUseCase,
+    EstadisticasFacturaUseCase,
     GuardarFacturaUseCase,
     ListarFacturasUseCase,
     ObtenerFacturaUseCase,
@@ -15,9 +18,11 @@ from app.modules.facturacion.application.use_cases.gestionar_facturas import (
 from app.modules.facturacion.domain.entities import EstadoFactura
 from app.modules.facturacion.infrastructure.persistence.repositories import SqlAlchemyFacturaRepository
 from app.modules.facturacion.presentation.api.dependencies import (
+    get_cancelar,
     get_desde_orden,
     get_eliminar,
     get_enviar,
+    get_estadisticas,
     get_factura_repo,
     get_guardar,
     get_listar,
@@ -26,10 +31,13 @@ from app.modules.facturacion.presentation.api.dependencies import (
 )
 from app.modules.facturacion.presentation.api.schemas import (
     DesdeOrdenRequest,
+    EstadisticasDataResponse,
+    EstadisticasFacturaResponse,
     FacturaCreateRequest,
     FacturaDataResponse,
     FacturaListResponse,
     FacturaResponse,
+    FacturaTotalesResponse,
     FormaPagoResponse,
     FormaPagoSriResponse,
     listar_facturas_query,
@@ -45,13 +53,16 @@ async def listar_facturas(
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarFacturasUseCase, Depends(get_listar)],
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=1000),
     search: str | None = Query(None),
     estado: EstadoFactura | None = Query(None),
     cliente_id: int | None = Query(None),
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
 ) -> FacturaListResponse:
-    query = listar_facturas_query(page, size, search, estado, cliente_id)
+    query = listar_facturas_query(page, size, search, estado, cliente_id, fecha_desde, fecha_hasta)
     facturas, total = await use_case.execute(query, tenant)
+    totales = await use_case.totales(query, tenant)
     pages = (total + size - 1) // size if size else 1
     return FacturaListResponse(
         data=[FacturaResponse.from_domain(factura) for factura in facturas],
@@ -59,7 +70,21 @@ async def listar_facturas(
         page=page,
         size=size,
         pages=pages,
+        totales=FacturaTotalesResponse.from_domain(totales),
     )
+
+
+@facturas_router.get("/estadisticas", response_model=EstadisticasDataResponse)
+async def estadisticas_facturas(
+    tenant: Annotated[ContextoTenant, Depends(get_tenant)],
+    use_case: Annotated[EstadisticasFacturaUseCase, Depends(get_estadisticas)],
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
+    cliente_id: int | None = Query(None),
+) -> EstadisticasDataResponse:
+    query = listar_facturas_query(1, 1, None, None, cliente_id, fecha_desde, fecha_hasta)
+    data = await use_case.execute(query, tenant)
+    return EstadisticasDataResponse(data=EstadisticasFacturaResponse.from_domain(data))
 
 
 @facturas_router.get("/{factura_id}", response_model=FacturaDataResponse)
@@ -101,6 +126,16 @@ async def eliminar_factura(
 ) -> Response:
     await use_case.execute(factura_id, tenant)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@facturas_router.post("/{factura_id}/cancelar", response_model=FacturaDataResponse)
+async def cancelar_factura(
+    factura_id: int,
+    tenant: Annotated[ContextoTenant, Depends(get_tenant)],
+    use_case: Annotated[CancelarFacturaUseCase, Depends(get_cancelar)],
+) -> FacturaDataResponse:
+    factura = await use_case.execute(factura_id, tenant)
+    return FacturaDataResponse(data=FacturaResponse.from_domain(factura), message="Factura cancelada")
 
 
 @facturas_router.post("/{factura_id}/enviar-sri", response_model=FacturaDataResponse)

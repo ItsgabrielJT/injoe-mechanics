@@ -23,9 +23,11 @@ const CAMPOS_SIN_TOTAL = new Set(["acciones", "__check__", "__reorder__"]);
 function PieConTotales({
   fields,
   label,
+  values,
 }: {
   fields: string[];
   label: string;
+  values?: Record<string, number>;
 }) {
   const apiRef = useGridApiContext();
   const [tick, setTick] = React.useState(0);
@@ -69,12 +71,15 @@ function PieConTotales({
   }
 
   const sumas: Record<string, number> = {};
-  for (const campo of fields) sumas[campo] = 0;
-  for (const fila of filas) {
-    if (fila.__isTotalRow) continue;
-    for (const campo of fields) {
-      const valor = Number(fila[campo]);
-      if (Number.isFinite(valor)) sumas[campo] += valor;
+  for (const campo of fields) sumas[campo] = Number(values?.[campo] ?? 0);
+  if (!values) {
+    for (const campo of fields) sumas[campo] = 0;
+    for (const fila of filas) {
+      if (fila.__isTotalRow) continue;
+      for (const campo of fields) {
+        const valor = Number(fila[campo]);
+        if (Number.isFinite(valor)) sumas[campo] += valor;
+      }
     }
   }
 
@@ -186,6 +191,7 @@ interface MuiDataTableProps {
   mobileHiddenFields?: string[];
   footerTotalFields?: string[];
   footerTotalLabel?: string;
+  footerTotalValues?: Record<string, number>;
 }
 
 export const MuiDataTable: React.FC<MuiDataTableProps> = ({
@@ -214,6 +220,7 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
   mobileHiddenFields = [],
   footerTotalFields,
   footerTotalLabel = "Totales",
+  footerTotalValues,
 }) => {
   const [compacto, setCompacto] = React.useState(false);
   const [paginationModel, setPaginationModel] = React.useState({
@@ -298,10 +305,11 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
     if (!footerTotalFields?.length) return undefined;
     const campos = footerTotalFields;
     const etiqueta = footerTotalLabel;
+    const valores = footerTotalValues;
     return function FooterConTotales() {
-      return <PieConTotales fields={campos} label={etiqueta} />;
+      return <PieConTotales fields={campos} label={etiqueta} values={valores} />;
     };
-  }, [footerTotalFields, footerTotalLabel]);
+  }, [footerTotalFields, footerTotalLabel, footerTotalValues]);
 
   const allRowsSize = Math.max(rowCount ?? rows.length, rows.length, 1);
   const basePageSizeOptions = [10, 25, 50, 100];

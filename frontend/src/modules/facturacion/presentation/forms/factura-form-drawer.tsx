@@ -26,6 +26,7 @@ interface LineaForm {
   descuento_porcentaje: string;
   tipo_impuesto: TipoImpuesto;
   bodega_id: number | null;
+  aplica_inventario: boolean;
 }
 
 function nuevaKey(): string {
@@ -33,7 +34,7 @@ function nuevaKey(): string {
 }
 
 function hoy(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
 }
 
 function dinero(valor: number): number {
@@ -112,21 +113,26 @@ export function FacturaFormDrawer({
     setNotas(factura?.notas ?? "");
     setTerminos(factura?.terminos ?? "");
     setBusqueda("");
-    setLineas((factura?.items ?? []).map((item) => ({
-      key: nuevaKey(),
-      producto_id: item.productoId,
-      servicio_id: item.servicioId,
-      descripcion: item.descripcion,
-      codigo: item.codigo ?? "",
-      cantidad: item.cantidad ? String(item.cantidad) : "",
-      precio_mostrado: item.precioUnitario ? String(item.precioUnitario) : "",
-      incluye_iva: false,
-      descuento_porcentaje: item.descuentoPorcentaje ? String(item.descuentoPorcentaje) : "",
-      tipo_impuesto: item.tipoImpuesto,
-      bodega_id: item.bodegaId,
-    })));
+    setLineas((factura?.items ?? []).map((item) => {
+      const aplicaInventario = item.aplicaInventario || Boolean(productos.find((p) => p.id === item.productoId)?.aplicaInventario);
+      return {
+        key: nuevaKey(),
+        producto_id: item.productoId,
+        servicio_id: item.servicioId,
+        descripcion: item.descripcion,
+        codigo: item.codigo ?? "",
+        cantidad: item.cantidad ? String(item.cantidad) : "",
+        precio_mostrado: item.precioUnitario ? String(item.precioUnitario) : "",
+        incluye_iva: false,
+        descuento_porcentaje: item.descuentoPorcentaje ? String(item.descuentoPorcentaje) : "",
+        tipo_impuesto: item.tipoImpuesto,
+        bodega_id: aplicaInventario ? item.bodegaId : null,
+        aplica_inventario: aplicaInventario,
+      };
+    }));
     for (const item of factura?.items ?? []) {
-      if (item.productoId) void onCargarExistencias(item.productoId);
+      const aplicaInventario = item.aplicaInventario || Boolean(productos.find((p) => p.id === item.productoId)?.aplicaInventario);
+      if (item.productoId && aplicaInventario) void onCargarExistencias(item.productoId);
     }
   }, [abierto, factura]);
 
@@ -142,7 +148,7 @@ export function FacturaFormDrawer({
       tipo: "producto" as const,
       id: p.id,
       label: p.nombre,
-      extra: `${p.codigo} · ${TIPOS_IMPUESTO.find((t) => t.value === p.tipoImpuesto)?.label ?? p.tipoImpuesto} · stock ${p.stockTotal}`,
+      extra: `${p.codigo} · ${TIPOS_IMPUESTO.find((t) => t.value === p.tipoImpuesto)?.label ?? p.tipoImpuesto} · ${p.aplicaInventario ? `stock ${p.stockTotal}` : "sin inventario"}`,
       precio: p.precioVenta,
     }));
     const servs = servicios.filter((s) => `${s.codigo} ${s.nombre}`.toLowerCase().includes(termino)).map((s) => ({
@@ -193,10 +199,11 @@ export function FacturaFormDrawer({
       incluye_iva: Boolean(origen.aplicaIva && cobraIva(origen.tipoImpuesto)),
       descuento_porcentaje: "",
       tipo_impuesto: origen.tipoImpuesto,
-      bodega_id: producto ? (bodegas[0]?.id ?? null) : null,
+      bodega_id: producto?.aplicaInventario ? (bodegas[0]?.id ?? null) : null,
+      aplica_inventario: producto?.aplicaInventario ?? false,
     }]);
     setBusqueda("");
-    if (!producto) return;
+    if (!producto?.aplicaInventario) return;
     try {
       const stocks = (await onCargarExistencias(producto.id)) ?? existencias[producto.id] ?? [];
       const conStock = stocks.find((item) => item.cantidad > 0);
@@ -218,7 +225,7 @@ export function FacturaFormDrawer({
       descuento_porcentaje: numeroVacio(linea.descuento_porcentaje),
       aplica_iva: cobraIva(linea.tipo_impuesto),
       tipo_impuesto: linea.tipo_impuesto,
-      bodega_id: linea.producto_id ? linea.bodega_id : null,
+      bodega_id: linea.aplica_inventario ? linea.bodega_id : null,
     }));
     await onSubmit({
       tipo_receptor: tipoReceptor,
@@ -241,7 +248,12 @@ export function FacturaFormDrawer({
         <div className="absolute inset-0 bg-black/50" onClick={onClose} />
         <div className="relative w-full max-w-[88rem] rounded-t-2xl sm:rounded-2xl bg-card shadow-elegant max-h-[94dvh] overflow-y-auto">
           <div className="flex items-center justify-between border-b px-6 py-4">
-            <h2 className="text-lg font-semibold">{factura ? `Editar ${factura.numero}` : "Nueva factura"}</h2>
+            <div>
+              <h2 className="text-lg font-semibold">{factura ? `Editar ${factura.numero}` : "Nueva factura"}</h2>
+              {factura?.estado === "RECHAZADA" && (
+                <p className="text-xs text-muted-foreground">Al guardar vuelve a borrador para corregir y reenviar al SRI.</p>
+              )}
+            </div>
             <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
           </div>
           <div className="px-6 py-4 space-y-5">
@@ -314,7 +326,8 @@ export function FacturaFormDrawer({
                     </tr>
                   )}
                   {lineasCalc.map(({ linea, calc }, index) => {
-                    const stock = linea.producto_id ? stockBodega(existencias[linea.producto_id], linea.bodega_id) : null;
+                    const aplicaStock = Boolean(linea.producto_id && linea.aplica_inventario);
+                    const stock = aplicaStock ? stockBodega(existencias[linea.producto_id ?? 0], linea.bodega_id) : null;
                     const esProducto = Boolean(linea.producto_id);
                     return (
                       <tr key={linea.key} className="border-t align-top hover:bg-primary/5">
@@ -325,7 +338,7 @@ export function FacturaFormDrawer({
                             {linea.descripcion}
                           </p>
                           <p className="pl-6 text-[11px] text-muted-foreground">{linea.codigo || "Sin código"} · {esProducto ? "Producto" : "Servicio"}</p>
-                          {esProducto ? (
+                          {aplicaStock ? (
                             <div className="pl-6 mt-1.5 space-y-1">
                               <select className="h-8 w-full max-w-xs rounded-md border px-2 text-xs bg-background" value={linea.bodega_id ?? ""} onChange={(e) => actualizar(linea.key, { bodega_id: e.target.value ? Number(e.target.value) : null })}>
                                 <option value="">Seleccionar bodega</option>
@@ -339,7 +352,10 @@ export function FacturaFormDrawer({
                               </p>
                             </div>
                           ) : (
-                            <p className="pl-6 mt-1 text-[11px] text-muted-foreground">Bodega: no aplica</p>
+                            <div className="pl-6 mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                              <p>Bodega: no aplica</p>
+                              {esProducto && <p>Stock: no aplica</p>}
+                            </div>
                           )}
                         </td>
                         <td className="px-2 py-3">

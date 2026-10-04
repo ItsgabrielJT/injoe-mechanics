@@ -80,6 +80,8 @@ class FacturaItem:
     aplica_iva: bool
     tipo_impuesto: TipoImpuesto
     bodega_id: int | None = None
+    bodega_nombre: str | None = None
+    aplica_inventario: bool = False
     subtotal: Decimal = Decimal("0")
     iva_amount: Decimal = Decimal("0")
     ice_amount: Decimal = Decimal("0")
@@ -132,11 +134,22 @@ class Factura:
     cliente_identificacion: str | None = None
     cliente_correo: str | None = None
     cliente_direccion: str | None = None
+    cliente_telefono: str | None = None
     forma_pago_nombre: str | None = None
     forma_pago_sri_codigo: str | None = None
     items: list[FacturaItem] = field(default_factory=list)
     creado_en: datetime | None = None
     actualizado_en: datetime | None = None
+
+    @property
+    def subtotal(self) -> Decimal:
+        return dinero(
+            self.subtotal_15
+            + self.subtotal_5
+            + self.subtotal_0
+            + self.subtotal_objeto
+            + self.subtotal_exento
+        )
 
     def recalcular(self) -> None:
         self.subtotal_15 = Decimal("0")

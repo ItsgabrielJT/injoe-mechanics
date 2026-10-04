@@ -110,7 +110,7 @@ export function MovimientosPage() {
     if (!token) return;
     void Promise.all([
       listarBodegas(token, { page: 1, size: 200, activo: true }),
-      listarProductos(token, { page: 1, size: 200, activo: true }),
+      listarProductos(token, { page: 1, size: 200, activo: true, aplica_inventario: true }),
     ]).then(([b, p]) => {
       setBodegas(b.data);
       setProductos(p.data);

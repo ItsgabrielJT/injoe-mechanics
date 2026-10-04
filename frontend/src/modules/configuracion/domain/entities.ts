@@ -9,6 +9,7 @@ export interface EmpresaConfig {
   sriId: number | null;
   entornoSri: string;
   moneda: string;
+  rutaLogo: string | null;
 }
 
 export interface PuntoConfig {

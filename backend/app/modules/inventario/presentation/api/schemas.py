@@ -473,9 +473,21 @@ def listar_catalogo_query(page: int, size: int, search: str | None, activo: bool
 
 
 def listar_productos_query(
-    page: int, size: int, search: str | None, categoria_id: int | None, activo: bool | None
+    page: int,
+    size: int,
+    search: str | None,
+    categoria_id: int | None,
+    activo: bool | None,
+    aplica_inventario: bool | None = None,
 ) -> ListarProductosQuery:
-    return ListarProductosQuery(page=page, size=size, search=search, categoria_id=categoria_id, activo=activo)
+    return ListarProductosQuery(
+        page=page,
+        size=size,
+        search=search,
+        categoria_id=categoria_id,
+        activo=activo,
+        aplica_inventario=aplica_inventario,
+    )
 
 
 def listar_movimientos_query(

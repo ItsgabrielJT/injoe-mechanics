@@ -24,6 +24,7 @@ def _empresa(modelo: EmpresaModel) -> EmpresaConfig:
         moneda=modelo.moneda,
         idioma=modelo.idioma,
         zona_horaria=modelo.zona_horaria,
+        ruta_logo=modelo.ruta_logo,
     )
 
 

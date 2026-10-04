@@ -69,6 +69,7 @@ export function ProductosPage() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [estado, setEstado] = useState("all");
+  const [filtroInventario, setFiltroInventario] = useState<"aplica" | "no_aplica" | "todos">("aplica");
   const [cargando, setCargando] = useState(true);
 
   const [categorias, setCategorias] = useState<CategoriaProducto[]>([]);
@@ -134,6 +135,7 @@ export function ProductosPage() {
         size: pageSize,
         search: debounced || undefined,
         activo: estado === "all" ? undefined : estado === "active",
+        aplica_inventario: filtroInventario === "todos" ? undefined : filtroInventario === "aplica",
       });
       setProductos(respuesta.data);
       setTotal(respuesta.total);
@@ -142,7 +144,7 @@ export function ProductosPage() {
     } finally {
       setCargando(false);
     }
-  }, [debounced, estado, page, pageSize, token]);
+  }, [debounced, estado, filtroInventario, page, pageSize, token]);
 
   const cargarAlertas = useCallback(async () => {
     if (!token) return;
@@ -172,7 +174,7 @@ export function ProductosPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [debounced, estado]);
+  }, [debounced, estado, filtroInventario]);
 
   async function guardarProducto(values: ProductoFormValues) {
     setGuardando(true);
@@ -265,7 +267,15 @@ export function ProductosPage() {
       { field: "nombre", headerName: "Nombre", minWidth: 160, flex: 1.3 },
       { field: "categoriaNombre", headerName: "Categoría", minWidth: 130, valueGetter: (value) => value || "—" },
       { field: "precioVenta", headerName: "Precio", minWidth: 110, valueGetter: (value) => formatoPrecio(Number(value) || 0) },
-      { field: "stockTotal", headerName: "Stock", minWidth: 90, valueGetter: (value) => formatoCantidad(Number(value) || 0) },
+      {
+        field: "stockTotal",
+        headerName: "Stock",
+        minWidth: 110,
+        valueGetter: (_value, row) => {
+          const producto = row as Producto;
+          return producto.aplicaInventario ? formatoCantidad(producto.stockTotal) : "No aplica";
+        },
+      },
       { field: "tipoImpuesto", headerName: "Impuesto", minWidth: 100, valueGetter: (value) => etiquetaImpuesto(value) },
       { field: "activo", headerName: "Estado", minWidth: 100, valueGetter: (value) => (value ? "Activo" : "Inactivo") },
       {
@@ -405,6 +415,15 @@ export function ProductosPage() {
               <option value="all">Todos los estados</option>
               <option value="active">Activo</option>
               <option value="inactive">Inactivo</option>
+            </select>
+            <select
+              className="flex h-10 rounded-md border border-input px-3 text-sm bg-background sm:w-52"
+              value={filtroInventario}
+              onChange={(event) => setFiltroInventario(event.target.value as "aplica" | "no_aplica" | "todos")}
+            >
+              <option value="aplica">Aplica stock</option>
+              <option value="no_aplica">No aplica stock</option>
+              <option value="todos">Todos los productos</option>
             </select>
           </div>
           <MuiDataTable

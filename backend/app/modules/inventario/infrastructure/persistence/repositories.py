@@ -347,6 +347,8 @@ class SqlAlchemyProductoRepository:
             stmt = stmt.where(ProductoModel.categoria_id == query.categoria_id)
         if query.activo is not None:
             stmt = stmt.where(ProductoModel.activo == query.activo)
+        if query.aplica_inventario is not None:
+            stmt = stmt.where(ProductoModel.aplica_inventario == query.aplica_inventario)
         total = (await self.session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
         stmt = stmt.order_by(func.lower(ProductoModel.nombre), ProductoModel.id)
         stmt = stmt.offset((query.page - 1) * query.size).limit(query.size)
@@ -634,6 +636,28 @@ class SqlAlchemyMovimientoRepository:
         if tipo == TipoMovimiento.AJUSTE:
             return tipo_ajuste == TipoAjuste.INGRESO
         return False
+
+    async def listar_por_nota_prefijo(
+        self, prefijo: str, empresa_id: int, punto_emision_id: int
+    ) -> list[MovimientoInventario]:
+        result = await self.session.execute(
+            select(MovimientoInventarioModel)
+            .options(*self._options())
+            .where(
+                MovimientoInventarioModel.nota.ilike(f"{prefijo}%"),
+                *self._alcance(empresa_id, punto_emision_id),
+            )
+        )
+        return [_movimiento(model) for model in result.scalars().unique().all()]
+
+    async def existe_por_nota(self, prefijo: str, empresa_id: int, punto_emision_id: int) -> bool:
+        result = await self.session.scalar(
+            select(MovimientoInventarioModel.id).where(
+                MovimientoInventarioModel.nota.ilike(f"{prefijo}%"),
+                *self._alcance(empresa_id, punto_emision_id),
+            )
+        )
+        return result is not None
 
     async def registrar(self, movimiento: MovimientoInventario) -> MovimientoInventario:
         lineas_persistidas: list[MovimientoLineaModel] = []

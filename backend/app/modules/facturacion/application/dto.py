@@ -57,3 +57,44 @@ class ListarFacturasQuery:
     search: str | None = None
     estado: EstadoFactura | None = None
     cliente_id: int | None = None
+    fecha_desde: date | None = None
+    fecha_hasta: date | None = None
+
+
+@dataclass
+class TotalesFactura:
+    cantidad: int = 0
+    subtotal: Decimal = Decimal("0")
+    iva_15: Decimal = Decimal("0")
+    iva_5: Decimal = Decimal("0")
+    iva_0: Decimal = Decimal("0")
+    total: Decimal = Decimal("0")
+
+
+@dataclass
+class ImpuestoEstadistica:
+    tasa: int
+    subtotal: Decimal = Decimal("0")
+    iva: Decimal = Decimal("0")
+    total: Decimal = Decimal("0")
+
+
+@dataclass
+class EstadoEstadistica:
+    estado: EstadoFactura
+    cantidad: int = 0
+    subtotal: Decimal = Decimal("0")
+    iva_15: Decimal = Decimal("0")
+    iva_5: Decimal = Decimal("0")
+    iva_0: Decimal = Decimal("0")
+    total: Decimal = Decimal("0")
+    numeros: list[str] = field(default_factory=list)
+
+
+@dataclass
+class EstadisticasFactura:
+    fecha_desde: date | None
+    fecha_hasta: date | None
+    por_estado: list[EstadoEstadistica] = field(default_factory=list)
+    totales: TotalesFactura = field(default_factory=TotalesFactura)
+    por_impuesto: list[ImpuestoEstadistica] = field(default_factory=list)

@@ -44,3 +44,13 @@ class FormaPagoNoEncontrada(ErrorDeDominio):
 class EnvioSriFallido(ErrorDeDominio):
     def __init__(self, mensaje: str = "No se pudo enviar la factura al SRI") -> None:
         super().__init__(mensaje)
+
+
+class FacturaYaCancelada(ErrorDeDominio):
+    def __init__(self, mensaje: str = "La factura ya está cancelada") -> None:
+        super().__init__(mensaje)
+
+
+class FacturaNoCancelable(ErrorDeDominio):
+    def __init__(self, mensaje: str = "Esta factura no se puede cancelar") -> None:
+        super().__init__(mensaje)

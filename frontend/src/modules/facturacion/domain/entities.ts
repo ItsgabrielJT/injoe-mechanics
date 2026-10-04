@@ -15,6 +15,8 @@ export interface ItemFactura {
   aplicaIva: boolean;
   tipoImpuesto: TipoImpuesto;
   bodegaId: number | null;
+  bodegaNombre: string | null;
+  aplicaInventario: boolean;
   subtotal: number;
   ivaAmount: number;
   total: number;
@@ -42,6 +44,8 @@ export interface Factura {
   subtotalExento: number;
   iva15: number;
   iva5: number;
+  iva0: number;
+  subtotal: number;
   descuento: number;
   total: number;
   notas: string | null;
@@ -49,7 +53,11 @@ export interface Factura {
   clienteNombres: string | null;
   clienteIdentificacion: string | null;
   clienteCorreo: string | null;
+  clienteDireccion: string | null;
+  clienteTelefono: string | null;
   formaPagoNombre: string | null;
+  formaPagoSriCodigo: string | null;
+  numeroAutorizacion: string | null;
   items: ItemFactura[];
 }
 
@@ -110,6 +118,80 @@ export const TIPOS_IMPUESTO: { value: TipoImpuesto; label: string }[] = [
   { value: "no_objeto", label: "No objeto" },
   { value: "exento_iva", label: "Exento" },
 ];
+
+export interface TotalesFactura {
+  cantidad: number;
+  subtotal: number;
+  iva15: number;
+  iva5: number;
+  iva0: number;
+  total: number;
+}
+
+export interface EstadoEstadistica {
+  estado: EstadoFactura;
+  cantidad: number;
+  subtotal: number;
+  iva15: number;
+  iva5: number;
+  iva0: number;
+  total: number;
+  numeros: string[];
+}
+
+export interface ImpuestoEstadistica {
+  tasa: number;
+  subtotal: number;
+  iva: number;
+  total: number;
+}
+
+export interface EstadisticasFactura {
+  fechaDesde: string | null;
+  fechaHasta: string | null;
+  porEstado: EstadoEstadistica[];
+  totales: TotalesFactura;
+  porImpuesto: ImpuestoEstadistica[];
+}
+
+export function etiquetaEstado(estado: EstadoFactura): string {
+  return {
+    BORRADOR: "Borrador",
+    ENVIADA: "Enviada",
+    PENDIENTE_AUTORIZACION: "Pendiente SRI",
+    AUTORIZADA: "Autorizada",
+    RECHAZADA: "Rechazada",
+    CANCELADA: "Cancelada",
+  }[estado];
+}
+
+export function claseChipEstado(estado: EstadoFactura): string {
+  if (estado === "AUTORIZADA") return "bg-emerald-600 text-white border-emerald-600";
+  if (estado === "RECHAZADA") return "bg-red-600 text-white border-red-600";
+  if (estado === "CANCELADA") return "bg-slate-600 text-white border-slate-600";
+  if (estado === "PENDIENTE_AUTORIZACION") return "bg-amber-500 text-white border-amber-500";
+  if (estado === "ENVIADA") return "bg-sky-600 text-white border-sky-600";
+  return "bg-zinc-200 text-zinc-800 border-zinc-300";
+}
+
+export function mensajeErrorSri(reasonError: string | null | undefined): string | null {
+  if (!reasonError) return null;
+  try {
+    const parsed = JSON.parse(reasonError) as { message?: string };
+    return parsed.message?.trim() || reasonError;
+  } catch {
+    return reasonError;
+  }
+}
+
+export function nombreCliente(factura: Pick<Factura, "tipoReceptor" | "clienteNombres">): string {
+  return factura.tipoReceptor === "consumidor_final" ? "Consumidor final" : factura.clienteNombres || "Cliente";
+}
+
+export function subtotalFactura(factura: Pick<Factura, "subtotal15" | "subtotal5" | "subtotal0" | "subtotalObjeto" | "subtotalExento" | "subtotal">): number {
+  if (typeof factura.subtotal === "number") return factura.subtotal;
+  return factura.subtotal15 + factura.subtotal5 + factura.subtotal0 + factura.subtotalObjeto + factura.subtotalExento;
+}
 
 export function numeroVacio(valor: string): number {
   if (valor.trim() === "") return 0;

@@ -13,6 +13,7 @@ interface EmpresaDto {
   sri_id: number | null;
   entorno_sri: string;
   moneda: string;
+  ruta_logo?: string | null;
 }
 
 interface PuntoDto {
@@ -42,6 +43,7 @@ function mapEmpresa(dto: EmpresaDto): EmpresaConfig {
     sriId: dto.sri_id,
     entornoSri: dto.entorno_sri,
     moneda: dto.moneda,
+    rutaLogo: dto.ruta_logo ?? null,
   };
 }
 

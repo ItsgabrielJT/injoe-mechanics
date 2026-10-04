@@ -101,3 +101,9 @@ class MovimientoInventarioRepository(Protocol):
     async def reporte(
         self, empresa_id: int, punto_emision_id: int, query: ListarMovimientosQuery
     ) -> list[MovimientoInventario]: ...
+
+    async def listar_por_nota_prefijo(
+        self, prefijo: str, empresa_id: int, punto_emision_id: int
+    ) -> list[MovimientoInventario]: ...
+
+    async def existe_por_nota(self, prefijo: str, empresa_id: int, punto_emision_id: int) -> bool: ...

@@ -100,6 +100,7 @@ class ListarProductosQuery:
     search: str | None = None
     categoria_id: int | None = None
     activo: bool | None = None
+    aplica_inventario: bool | None = None
 
 
 @dataclass(frozen=True)
