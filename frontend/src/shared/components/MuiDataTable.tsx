@@ -38,7 +38,7 @@ function PieConTotales({
     if (!api?.subscribeEvent) return undefined;
     const refresh = () => setTick((n) => n + 1);
     const eventos = [
-      "filteredRowsSetChange",
+      "filteredRowsSet",
       "rowsSet",
       "columnsChange",
       "columnOrderChange",
@@ -102,10 +102,16 @@ function PieConTotales({
                 contenido = label;
               } else if (fields.includes(col.field)) {
                 const valor = filaTotal[col.field];
-                if (col.valueFormatter) {
-                  contenido = col.valueFormatter(valor, filaTotal, col, apiRef);
-                } else if (col.valueGetter) {
-                  contenido = col.valueGetter(valor, filaTotal, col, apiRef);
+                const formatear = col.valueFormatter as
+                  | ((value: unknown, row: GridValidRowModel, column: typeof col, api: typeof apiRef) => React.ReactNode)
+                  | undefined;
+                const obtener = col.valueGetter as
+                  | ((value: unknown, row: GridValidRowModel, column: typeof col, api: typeof apiRef) => React.ReactNode)
+                  | undefined;
+                if (formatear) {
+                  contenido = formatear(valor, filaTotal, col, apiRef);
+                } else if (obtener) {
+                  contenido = obtener(valor, filaTotal, col, apiRef);
                 } else {
                   contenido = valor;
                 }
@@ -224,8 +230,6 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
   footerTotalFields,
   footerTotalLabel = "Totales",
   footerTotalValues,
-  getDetailPanelContent,
-  getDetailPanelHeight,
 }) => {
   const [compacto, setCompacto] = React.useState(false);
   const [paginationModel, setPaginationModel] = React.useState({
@@ -371,8 +375,6 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
           }}
           columnVisibilityModel={visibilityEfectiva}
           onColumnVisibilityModelChange={handleVisibilityChange}
-          getDetailPanelContent={getDetailPanelContent}
-          getDetailPanelHeight={getDetailPanelHeight ?? (getDetailPanelContent ? () => "auto" : undefined)}
           sx={{
             border: "none",
             flex: 1,

@@ -53,7 +53,8 @@ const schema = z.object({
   activo: z.boolean(),
 });
 
-export type ServicioFormValues = z.infer<typeof schema>;
+export type ServicioFormValues = z.output<typeof schema>;
+type ServicioFormInput = z.input<typeof schema>;
 
 interface ServicioFormDrawerProps {
   abierto: boolean;
@@ -63,7 +64,7 @@ interface ServicioFormDrawerProps {
   onSubmit: (values: ServicioFormValues) => Promise<void>;
 }
 
-function valoresIniciales(servicio?: Servicio | null): ServicioFormValues {
+function valoresIniciales(servicio?: Servicio | null): ServicioFormInput {
   return {
     codigo: servicio?.codigo ?? generarCodigoServicio(),
     nombre: servicio?.nombre ?? "",
@@ -99,7 +100,7 @@ function recolectarMensajes(error: unknown): string[] {
 }
 
 export function ServicioFormDrawer({ abierto, cargando, servicio, onClose, onSubmit }: ServicioFormDrawerProps) {
-  const form = useForm<ServicioFormValues>({
+  const form = useForm<ServicioFormInput, unknown, ServicioFormValues>({
     resolver: zodResolver(schema),
     defaultValues: valoresIniciales(servicio),
     mode: "onSubmit",

@@ -51,7 +51,8 @@ const schema = z.object({
   }
 });
 
-export type ProductoFormValues = z.infer<typeof schema>;
+export type ProductoFormValues = z.output<typeof schema>;
+type ProductoFormInput = z.input<typeof schema>;
 
 interface Props {
   abierto: boolean;
@@ -64,7 +65,7 @@ interface Props {
 }
 
 export function ProductoFormDrawer({ abierto, cargando, producto, categorias, bodegas, onClose, onSubmit }: Props) {
-  const form = useForm<ProductoFormValues>({
+  const form = useForm<ProductoFormInput, unknown, ProductoFormValues>({
     resolver: zodResolver(schema),
     defaultValues: valoresIniciales(producto),
   });
@@ -262,7 +263,7 @@ export function ProductoFormDrawer({ abierto, cargando, producto, categorias, bo
   );
 }
 
-function valoresIniciales(producto?: Producto | null): ProductoFormValues {
+function valoresIniciales(producto?: Producto | null): ProductoFormInput {
   return {
     codigo: producto?.codigo ?? "",
     codigo_barras: producto?.codigoBarras ?? "",
