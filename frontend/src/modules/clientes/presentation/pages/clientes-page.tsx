@@ -4,16 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
 import { Car, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
-import type { Cliente, ClienteInput, Vehiculo } from "@/modules/clientes/domain/entities";
+import type { Cliente, ClienteInput } from "@/modules/clientes/domain/entities";
 import {
   actualizarCliente,
-  actualizarVehiculo,
   crearCliente,
-  crearVehiculo,
   eliminarCliente,
-  eliminarVehiculo,
   listarClientes,
-  listarVehiculosCliente,
 } from "@/modules/clientes/infrastructure/clientes-api";
 import { ClienteFormDrawer, type ClienteFormValues } from "@/modules/clientes/presentation/forms/cliente-form-drawer";
 import { VehiculosDialog } from "@/modules/clientes/presentation/modals/vehiculos-dialog";
@@ -64,7 +60,6 @@ export function ClientesPage() {
   const [clienteEdicion, setClienteEdicion] = useState<Cliente | null>(null);
   const [vehiculosAbierto, setVehiculosAbierto] = useState(false);
   const [clienteVehiculos, setClienteVehiculos] = useState<Cliente | null>(null);
-  const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [clienteAEliminar, setClienteAEliminar] = useState<Cliente | null>(null);
   const [eliminando, setEliminando] = useState(false);
 
@@ -148,17 +143,6 @@ export function ClientesPage() {
   async function abrirVehiculos(cliente: Cliente) {
     setClienteVehiculos(cliente);
     setVehiculosAbierto(true);
-    const lista = await listarVehiculosCliente(token, cliente.id);
-    setVehiculos(lista);
-  }
-
-  async function recargarVehiculos() {
-    if (!clienteVehiculos) {
-      return;
-    }
-    const lista = await listarVehiculosCliente(token, clienteVehiculos.id);
-    setVehiculos(lista);
-    await cargar();
   }
 
   const columns = useMemo<GridColDef[]>(
@@ -289,34 +273,12 @@ export function ClientesPage() {
 
       <VehiculosDialog
         abierto={vehiculosAbierto}
+        token={token}
+        clienteId={clienteVehiculos?.id ?? null}
         clienteNombre={clienteVehiculos?.nombres ?? ""}
-        vehiculos={vehiculos}
-        cargando={guardando}
         onClose={() => setVehiculosAbierto(false)}
-        onCrear={async (input) => {
-          if (!clienteVehiculos) {
-            return;
-          }
-          setGuardando(true);
-          try {
-            await crearVehiculo(token, { ...input, cliente_id: clienteVehiculos.id });
-            await recargarVehiculos();
-          } finally {
-            setGuardando(false);
-          }
-        }}
-        onActualizar={async (id, input) => {
-          setGuardando(true);
-          try {
-            await actualizarVehiculo(token, id, input);
-            await recargarVehiculos();
-          } finally {
-            setGuardando(false);
-          }
-        }}
-        onEliminar={async (id) => {
-          await eliminarVehiculo(token, id);
-          await recargarVehiculos();
+        onCambio={async () => {
+          await cargar();
         }}
       />
 

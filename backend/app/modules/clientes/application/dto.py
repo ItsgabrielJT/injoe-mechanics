@@ -105,6 +105,21 @@ class ListarVehiculosQuery:
     size: int = 10
     search: str | None = None
     cliente_id: int | None = None
+    placa: str | None = None
+    marca: str | None = None
+    modelo: str | None = None
+    anio: int | None = None
+
+
+@dataclass(frozen=True)
+class AsignacionTransferencia:
+    vehiculo_id: int
+    cliente_destino_id: int
+
+
+@dataclass(frozen=True)
+class TransferirVehiculosCommand:
+    asignaciones: list[AsignacionTransferencia]
 
 
 @dataclass(frozen=True)

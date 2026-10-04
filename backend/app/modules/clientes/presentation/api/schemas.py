@@ -7,10 +7,12 @@ from app.modules.clientes.application.dto import (
     ActualizarClienteCommand,
     ActualizarVehiculoCommand,
     AltaRapidaCommand,
+    AsignacionTransferencia,
     CrearClienteCommand,
     CrearVehiculoCommand,
     ListarClientesQuery,
     ListarVehiculosQuery,
+    TransferirVehiculosCommand,
 )
 from app.modules.clientes.domain.entities import Cliente, TipoCliente, TipoCombustible, TipoTransmision, TipoVehiculo, Vehiculo
 
@@ -270,10 +272,48 @@ def listar_clientes_query(
     )
 
 
+class AsignacionTransferenciaRequest(BaseModel):
+    vehiculo_id: int
+    cliente_destino_id: int
+
+
+class TransferirVehiculosRequest(BaseModel):
+    asignaciones: list[AsignacionTransferenciaRequest] = Field(..., min_length=1)
+
+    def to_command(self) -> TransferirVehiculosCommand:
+        return TransferirVehiculosCommand(
+            asignaciones=[
+                AsignacionTransferencia(
+                    vehiculo_id=item.vehiculo_id,
+                    cliente_destino_id=item.cliente_destino_id,
+                )
+                for item in self.asignaciones
+            ]
+        )
+
+
+class TransferirVehiculosResponse(BaseModel):
+    data: list[VehiculoResponse]
+    message: str = "Vehículos transferidos"
+
+
 def listar_vehiculos_query(
     page: int,
     size: int,
     search: str | None,
     cliente_id: int | None,
+    placa: str | None = None,
+    marca: str | None = None,
+    modelo: str | None = None,
+    anio: int | None = None,
 ) -> ListarVehiculosQuery:
-    return ListarVehiculosQuery(page=page, size=size, search=search, cliente_id=cliente_id)
+    return ListarVehiculosQuery(
+        page=page,
+        size=size,
+        search=search,
+        cliente_id=cliente_id,
+        placa=placa,
+        marca=marca,
+        modelo=modelo,
+        anio=anio,
+    )

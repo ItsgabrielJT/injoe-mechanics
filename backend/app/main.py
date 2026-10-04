@@ -39,6 +39,7 @@ from app.modules.clientes.domain.exceptions import (
     NombresRequeridos,
     PlacaDuplicada,
     PlacaRequerida,
+    TransferenciaInvalida,
     VehiculoNoEncontrado,
 )
 from app.modules.clientes.infrastructure.persistence import models as clientes_models  # noqa: F401
@@ -164,6 +165,7 @@ CODIGOS_HTTP = {
     CorreoRequerido: 400,
     NombresRequeridos: 400,
     PlacaRequerida: 400,
+    TransferenciaInvalida: 400,
     ServicioNoEncontrado: 404,
     CodigoDuplicado: 409,
     NombreRequerido: 400,

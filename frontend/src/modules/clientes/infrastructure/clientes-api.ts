@@ -187,8 +187,32 @@ export async function eliminarCliente(token: string, id: number): Promise<void> 
   await httpClient<void>(`/clientes/${id}`, { method: "DELETE", token });
 }
 
-export async function listarVehiculosCliente(token: string, clienteId: number): Promise<Vehiculo[]> {
-  const dto = await httpClient<ListaApi<VehiculoApiDto>>(`/clientes/${clienteId}/vehiculos`, { token });
+export async function listarVehiculosCliente(
+  token: string,
+  clienteId: number,
+  params?: { page?: number; size?: number; placa?: string; marca?: string; modelo?: string; anio?: string },
+): Promise<{ data: Vehiculo[]; total: number; page: number; size: number }> {
+  const query = new URLSearchParams({
+    page: String(params?.page ?? 1),
+    size: String(params?.size ?? 10),
+  });
+  if (params?.placa) query.set("placa", params.placa);
+  if (params?.marca) query.set("marca", params.marca);
+  if (params?.modelo) query.set("modelo", params.modelo);
+  if (params?.anio) query.set("anio", params.anio);
+  const dto = await httpClient<ListaApi<VehiculoApiDto>>(`/clientes/${clienteId}/vehiculos?${query.toString()}`, { token });
+  return { data: dto.data.map(mapVehiculo), total: dto.total, page: dto.page, size: dto.size };
+}
+
+export async function transferirVehiculos(
+  token: string,
+  asignaciones: { vehiculo_id: number; cliente_destino_id: number }[],
+): Promise<Vehiculo[]> {
+  const dto = await httpClient<DataApi<VehiculoApiDto[]>>("/vehiculos/transferir", {
+    method: "POST",
+    token,
+    body: { asignaciones },
+  });
   return dto.data.map(mapVehiculo);
 }
 

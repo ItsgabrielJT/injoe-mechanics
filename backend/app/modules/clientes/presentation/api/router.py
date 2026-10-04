@@ -14,6 +14,7 @@ from app.modules.clientes.application.use_cases.listar_clientes import ListarCli
 from app.modules.clientes.application.use_cases.listar_vehiculos import ListarVehiculosClienteUseCase, ListarVehiculosUseCase
 from app.modules.clientes.application.use_cases.obtener_cliente import ObtenerClienteUseCase
 from app.modules.clientes.application.use_cases.obtener_vehiculo import ObtenerVehiculoUseCase
+from app.modules.clientes.application.use_cases.transferir_vehiculos import TransferirVehiculosUseCase
 from app.modules.clientes.domain.entities import TipoCliente
 from app.modules.clientes.presentation.api.dependencies import (
     get_alta_rapida_use_case,
@@ -29,6 +30,7 @@ from app.modules.clientes.presentation.api.dependencies import (
     get_obtener_cliente_use_case,
     get_obtener_vehiculo_use_case,
     get_tenant,
+    get_transferir_vehiculos_use_case,
 )
 from app.modules.clientes.presentation.api.schemas import (
     AltaRapidaRequest,
@@ -43,6 +45,8 @@ from app.modules.clientes.presentation.api.schemas import (
     VehiculoListResponse,
     VehiculoResponse,
     VehiculoUpdateRequest,
+    TransferirVehiculosRequest,
+    TransferirVehiculosResponse,
     listar_clientes_query,
     listar_vehiculos_query,
 )
@@ -135,14 +139,22 @@ async def listar_vehiculos_cliente(
     cliente_id: int,
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarVehiculosClienteUseCase, Depends(get_listar_vehiculos_cliente_use_case)],
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=100),
+    placa: str | None = Query(None),
+    marca: str | None = Query(None),
+    modelo: str | None = Query(None),
+    anio: int | None = Query(None, ge=1900, le=2100),
 ) -> VehiculoListResponse:
-    vehiculos = await use_case.execute(cliente_id, tenant)
+    query = listar_vehiculos_query(page, size, None, cliente_id, placa, marca, modelo, anio)
+    vehiculos, total = await use_case.execute(cliente_id, query, tenant)
+    pages = (total + size - 1) // size if size else 1
     return VehiculoListResponse(
         data=[VehiculoResponse.from_domain(vehiculo) for vehiculo in vehiculos],
-        total=len(vehiculos),
-        page=1,
-        size=len(vehiculos) or 1,
-        pages=1,
+        total=total,
+        page=page,
+        size=size,
+        pages=pages,
         message="Vehículos del cliente",
     )
 
@@ -165,6 +177,19 @@ async def listar_vehiculos(
         page=page,
         size=size,
         pages=pages,
+    )
+
+
+@vehiculos_router.post("/transferir", response_model=TransferirVehiculosResponse)
+async def transferir_vehiculos(
+    request: TransferirVehiculosRequest,
+    tenant: Annotated[ContextoTenant, Depends(get_tenant)],
+    use_case: Annotated[TransferirVehiculosUseCase, Depends(get_transferir_vehiculos_use_case)],
+) -> TransferirVehiculosResponse:
+    vehiculos = await use_case.execute(request.to_command(), tenant)
+    return TransferirVehiculosResponse(
+        data=[VehiculoResponse.from_domain(vehiculo) for vehiculo in vehiculos],
+        message=f"{len(vehiculos)} vehículo(s) transferido(s)",
     )
 
 

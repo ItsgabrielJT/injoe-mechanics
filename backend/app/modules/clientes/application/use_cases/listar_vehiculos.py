@@ -23,9 +23,23 @@ class ListarVehiculosClienteUseCase:
     def __init__(self, vehiculo_repository: VehiculoRepository) -> None:
         self.vehiculo_repository = vehiculo_repository
 
-    async def execute(self, cliente_id: int, tenant: ContextoTenant) -> list[Vehiculo]:
-        return await self.vehiculo_repository.listar_por_cliente(
-            cliente_id,
+    async def execute(
+        self,
+        cliente_id: int,
+        query: ListarVehiculosQuery,
+        tenant: ContextoTenant,
+    ) -> tuple[list[Vehiculo], int]:
+        return await self.vehiculo_repository.listar(
             tenant.empresa_id,
             tenant.punto_emision_id,
+            ListarVehiculosQuery(
+                page=query.page,
+                size=query.size,
+                search=query.search,
+                cliente_id=cliente_id,
+                placa=query.placa,
+                marca=query.marca,
+                modelo=query.modelo,
+                anio=query.anio,
+            ),
         )

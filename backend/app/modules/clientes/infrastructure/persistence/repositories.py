@@ -283,6 +283,14 @@ class SqlAlchemyVehiculoRepository:
                     ClienteModel.identificacion.ilike(termino),
                 )
             )
+        if query.placa:
+            stmt = stmt.where(VehiculoModel.placa.ilike(f"%{query.placa.strip()}%"))
+        if query.marca:
+            stmt = stmt.where(VehiculoModel.marca.ilike(f"%{query.marca.strip()}%"))
+        if query.modelo:
+            stmt = stmt.where(VehiculoModel.modelo.ilike(f"%{query.modelo.strip()}%"))
+        if query.anio is not None:
+            stmt = stmt.where(VehiculoModel.anio == query.anio)
         total = (await self.session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
         stmt = stmt.order_by(VehiculoModel.placa, VehiculoModel.id)
         stmt = stmt.offset((query.page - 1) * query.size).limit(query.size)
@@ -320,6 +328,7 @@ class SqlAlchemyVehiculoRepository:
             result = await self.session.execute(select(VehiculoModel).where(VehiculoModel.id == vehiculo.id))
             model = result.scalar_one()
 
+        model.cliente_id = vehiculo.cliente_id
         model.placa = vehiculo.placa
         model.marca = vehiculo.marca
         model.modelo = vehiculo.modelo

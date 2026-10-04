@@ -17,6 +17,7 @@ from app.modules.clientes.application.use_cases.listar_clientes import ListarCli
 from app.modules.clientes.application.use_cases.listar_vehiculos import ListarVehiculosClienteUseCase, ListarVehiculosUseCase
 from app.modules.clientes.application.use_cases.obtener_cliente import ObtenerClienteUseCase
 from app.modules.clientes.application.use_cases.obtener_vehiculo import ObtenerVehiculoUseCase
+from app.modules.clientes.application.use_cases.transferir_vehiculos import TransferirVehiculosUseCase
 from app.modules.clientes.infrastructure.persistence.repositories import (
     SqlAlchemyClienteRepository,
     SqlAlchemyVehiculoRepository,
@@ -109,6 +110,13 @@ async def get_eliminar_vehiculo_use_case(
     repository: Annotated[SqlAlchemyVehiculoRepository, Depends(get_vehiculo_repository)],
 ) -> EliminarVehiculoUseCase:
     return EliminarVehiculoUseCase(repository)
+
+
+async def get_transferir_vehiculos_use_case(
+    vehiculo_repository: Annotated[SqlAlchemyVehiculoRepository, Depends(get_vehiculo_repository)],
+    cliente_repository: Annotated[SqlAlchemyClienteRepository, Depends(get_cliente_repository)],
+) -> TransferirVehiculosUseCase:
+    return TransferirVehiculosUseCase(vehiculo_repository, cliente_repository)
 
 
 async def get_alta_rapida_use_case(

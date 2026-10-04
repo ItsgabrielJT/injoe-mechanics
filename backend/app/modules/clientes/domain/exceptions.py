@@ -39,3 +39,8 @@ class PlacaDuplicada(ErrorDeDominio):
 class PlacaRequerida(ErrorDeDominio):
     def __init__(self, mensaje: str = "La placa es obligatoria") -> None:
         super().__init__(mensaje)
+
+
+class TransferenciaInvalida(ErrorDeDominio):
+    def __init__(self, mensaje: str = "La transferencia de vehículos no es válida") -> None:
+        super().__init__(mensaje)
