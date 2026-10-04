@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, Briefcase, ClipboardList, FileText, LayoutDashboard, Menu, Package, Settings, Truck, Users, X } from "lucide-react";
+import { ArrowLeftRight, Briefcase, Car, ClipboardList, FileText, LayoutDashboard, Menu, Package, Settings, Truck, Users, X } from "lucide-react";
 import { SwitcherPunto } from "@/modules/acceso/presentation/components/switcher-punto";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import { Button } from "@/shared/components/ui/button";
@@ -13,6 +13,7 @@ const NAV = [
   { href: "/dashboard", label: "Panel", icon: LayoutDashboard },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/ordenes-trabajo", label: "Órdenes", icon: ClipboardList },
+  { href: "/estado-vehiculo", label: "Estado de vehículo", icon: Car },
   { href: "/servicios", label: "Servicios", icon: Briefcase },
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/proveedores", label: "Proveedores", icon: Truck },

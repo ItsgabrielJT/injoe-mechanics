@@ -6,6 +6,7 @@ import {
   GridColDef,
   GridColumnVisibilityModel,
   GridFooter,
+  GridRowParams,
   GridRowSelectionModel,
   GridToolbarColumnsButton,
   GridToolbarContainer,
@@ -192,6 +193,8 @@ interface MuiDataTableProps {
   footerTotalFields?: string[];
   footerTotalLabel?: string;
   footerTotalValues?: Record<string, number>;
+  getDetailPanelContent?: (params: GridRowParams) => React.ReactNode;
+  getDetailPanelHeight?: (params: GridRowParams) => number | "auto";
 }
 
 export const MuiDataTable: React.FC<MuiDataTableProps> = ({
@@ -221,6 +224,8 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
   footerTotalFields,
   footerTotalLabel = "Totales",
   footerTotalValues,
+  getDetailPanelContent,
+  getDetailPanelHeight,
 }) => {
   const [compacto, setCompacto] = React.useState(false);
   const [paginationModel, setPaginationModel] = React.useState({
@@ -366,6 +371,8 @@ export const MuiDataTable: React.FC<MuiDataTableProps> = ({
           }}
           columnVisibilityModel={visibilityEfectiva}
           onColumnVisibilityModelChange={handleVisibilityChange}
+          getDetailPanelContent={getDetailPanelContent}
+          getDetailPanelHeight={getDetailPanelHeight ?? (getDetailPanelContent ? () => "auto" : undefined)}
           sx={{
             border: "none",
             flex: 1,

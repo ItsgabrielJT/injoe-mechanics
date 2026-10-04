@@ -85,6 +85,8 @@ from app.modules.inventario.presentation.api.router import (
     movimientos_router,
     productos_router,
 )
+from app.modules.estado_vehiculo.domain.exceptions import HistorialVehiculoNoEncontrado
+from app.modules.estado_vehiculo.presentation.api.router import estado_vehiculo_router
 from app.modules.ordenes_trabajo.domain.exceptions import (
     BodegaRequerida,
     ItemInvalido,
@@ -155,6 +157,7 @@ CODIGOS_HTTP = {
     SesionSinContexto: 403,
     ClienteNoEncontrado: 404,
     VehiculoNoEncontrado: 404,
+    HistorialVehiculoNoEncontrado: 404,
     IdentificacionDuplicada: 409,
     PlacaDuplicada: 409,
     IdentificacionInvalida: 400,
@@ -246,6 +249,7 @@ app.include_router(proveedores_router, prefix=settings.API_V1_STR)
 app.include_router(producto_precios_router, prefix=settings.API_V1_STR)
 app.include_router(servicio_precios_router, prefix=settings.API_V1_STR)
 app.include_router(ordenes_router, prefix=settings.API_V1_STR)
+app.include_router(estado_vehiculo_router, prefix=settings.API_V1_STR)
 app.include_router(usuarios_router, prefix=settings.API_V1_STR)
 app.include_router(empresa_router, prefix=settings.API_V1_STR)
 app.include_router(puntos_router, prefix=settings.API_V1_STR)
