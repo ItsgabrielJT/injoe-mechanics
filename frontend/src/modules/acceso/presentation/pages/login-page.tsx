@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { LoginForm } from "@/modules/acceso/presentation/forms/login-form";
+import { BrandFooterLogo, BrandLockup, NOMBRE_SISTEMA } from "@/shared/components/brand-lockup";
 
 export function LoginPage() {
   return (
@@ -32,15 +33,11 @@ export function LoginPage() {
                 animate={{ x: 0, opacity: 1 }}
                 className="w-full lg:w-1/2 text-center lg:text-left"
               >
-                <div className="mb-4 sm:mb-8 flex items-center justify-center lg:justify-start gap-3 sm:gap-4">
-                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0">
-                    <img src="/logos/logo_injoe_web.png" alt="INJOE" className="w-full h-full object-contain" />
-                  </div>
-                  <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white drop-shadow-2xl">
-                    <span className="text-primary">INJOE</span>
-                    <span className="text-white/90"> MECÁNICOS</span>
-                  </h1>
-                </div>
+                <BrandLockup
+                  as="h1"
+                  size="lg"
+                  className="mb-4 sm:mb-8 justify-center gap-3 sm:gap-4 lg:justify-start"
+                />
                 <p className="text-base sm:text-xl text-white/90 mb-4 lg:mb-8">Inicia sesión para acceder a tu cuenta</p>
               </motion.div>
               <motion.div
@@ -56,11 +53,11 @@ export function LoginPage() {
         <footer className="relative z-10 py-6 px-4 border-t border-white/10">
           <div className="w-full max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="w-40 sm:w-60 h-10 sm:h-12 rounded-xl overflow-hidden bg-white/10 backdrop-blur-md border border-white/20">
-              <img src="/logos/logo_injoe_white.png" alt="INJOE" className="w-full h-full object-contain p-2" />
+              <BrandFooterLogo />
             </div>
             <div className="text-center md:text-right">
               <p className="text-white/60 text-sm">
-                © {new Date().getFullYear()} INJOE MECÁNICOS. Todos los derechos reservados.
+                © {new Date().getFullYear()} {NOMBRE_SISTEMA}. Todos los derechos reservados.
               </p>
               <p className="text-white/50 text-xs mt-1">Sistema de talleres y puntos de emisión</p>
             </div>

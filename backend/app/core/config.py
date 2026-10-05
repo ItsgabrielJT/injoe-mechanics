@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8003
     CORS_ORIGINS: str = "http://localhost:3003,http://127.0.0.1:3003"
-    APP_NAME: str = "INJOE Mecánicos API"
+    APP_NAME: str = "INJOE MECHANICS API"
     APP_VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     SRI_SIGN_URL: str = "http://localhost:8000/sri"

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight, MapPin } from "lucide-react";
 import type { Empresa, PuntoEmision } from "@/modules/acceso/domain/entities";
+import { BrandLockup } from "@/shared/components/brand-lockup";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
@@ -30,15 +31,7 @@ export function SelectorPuntoEmision({ empresas, onSelect, cargando }: SelectorP
       </div>
       <div className="relative z-10 w-full max-w-3xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-6">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0">
-              <img src="/logos/logo_injoe_web.png" alt="INJOE" className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white">
-              <span className="text-primary">INJOE</span>
-              <span className="text-white/90"> MECÁNICOS</span>
-            </h1>
-          </div>
+          <BrandLockup as="h1" size="lg" className="mb-6 justify-center gap-3 sm:gap-4" />
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2">Selecciona punto de emisión</h2>
           <p className="text-sm sm:text-base text-white/70">Elige el punto de emisión desde el cual trabajarás</p>
         </motion.div>

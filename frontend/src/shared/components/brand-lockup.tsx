@@ -21,7 +21,7 @@ export function BrandLockup({ size = "md", as = "p", className, nameClassName }:
   return (
     <div className={cn("flex min-w-0 items-center gap-3", className)}>
       <img src={LOGO_SISTEMA} alt={NOMBRE_SISTEMA} className={cn(s.logo, "shrink-0 object-contain")} />
-      <NameTag className={cn("leading-tight text-primary", s.name, nameClassName)} translate="no">
+      <NameTag className={cn("leading-tight text-primary whitespace-nowrap", s.name, nameClassName)} translate="no">
         {NOMBRE_SISTEMA}
       </NameTag>
     </div>

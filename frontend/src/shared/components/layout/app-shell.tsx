@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeftRight, Briefcase, Car, ClipboardList, FileText, LayoutDashboard, Menu, Package, Settings, Truck, Users, X } from "lucide-react";
 import { SwitcherPunto } from "@/modules/acceso/presentation/components/switcher-punto";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
+import { BrandLockup } from "@/shared/components/brand-lockup";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
@@ -36,11 +37,7 @@ function SidebarContent({
   return (
     <>
       <div className="flex items-center gap-3 px-2 py-4 border-b border-border/50">
-        <img src="/logos/logo_injoe_web.png" alt="INJOE" className="h-10 w-10 object-contain" />
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-primary">INJOE</p>
-          <p className="text-sm text-muted-foreground">Mecánicos</p>
-        </div>
+        <BrandLockup size="md" className="min-w-0 flex-1" />
         {onCerrarMenu && (
           <Button variant="ghost" size="icon" className="shrink-0" onClick={onCerrarMenu} aria-label="Cerrar menú">
             <X className="h-5 w-5" />
@@ -120,11 +117,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Button variant="ghost" size="icon" onClick={() => setMenuAbierto(true)} aria-label="Abrir menú">
             <Menu className="h-5 w-5" />
           </Button>
-          <img src="/logos/logo_injoe_web.png" alt="INJOE" className="h-8 w-8 object-contain" />
-          <div className="min-w-0">
-            <p className="font-semibold text-primary leading-tight">INJOE</p>
-            <p className="text-xs text-muted-foreground truncate">Mecánicos</p>
-          </div>
+          <BrandLockup size="sm" className="min-w-0" />
         </header>
         <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8 flex flex-col">{children}</main>
       </div>
