@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Calculator, Package, Trash2, Wrench, X } from "lucide-react";
-import { BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
+import { listarClientes } from "@/modules/clientes/infrastructure/clientes-api";
+import { listarProductos } from "@/modules/inventario/infrastructure/inventario-api";
+import { BuscadorSelect, type OpcionBuscador } from "@/modules/inventario/presentation/components/buscador-select";
 import type { Bodega, Existencia, Producto, TipoImpuesto } from "@/modules/inventario/domain/entities";
 import type { Servicio } from "@/modules/servicios/domain/entities";
-import type { Cliente } from "@/modules/clientes/domain/entities";
+import { listarServicios } from "@/modules/servicios/infrastructure/servicios-api";
 import type { Factura, FacturaInput, FormaPago, ItemFacturaInput, TipoReceptor } from "@/modules/facturacion/domain/entities";
 import { numeroVacio, tasaIva, TIPOS_IMPUESTO } from "@/modules/facturacion/domain/entities";
 import { Portal } from "@/shared/components/portal";
@@ -66,11 +68,9 @@ function stockBodega(existencias: Existencia[] | undefined, bodegaId: number | n
 
 interface Props {
   abierto: boolean;
+  token: string;
   cargando?: boolean;
   factura?: Factura | null;
-  clientes: Cliente[];
-  productos: Producto[];
-  servicios: Servicio[];
   formasPago: FormaPago[];
   bodegas: Bodega[];
   existencias: Record<number, Existencia[]>;
@@ -81,11 +81,9 @@ interface Props {
 
 export function FacturaFormDrawer({
   abierto,
+  token,
   cargando,
   factura,
-  clientes,
-  productos,
-  servicios,
   formasPago,
   bodegas,
   existencias,
@@ -102,6 +100,9 @@ export function FacturaFormDrawer({
   const [terminos, setTerminos] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [lineas, setLineas] = useState<LineaForm[]>([]);
+  const [productosHallados, setProductosHallados] = useState<Producto[]>([]);
+  const [serviciosHallados, setServiciosHallados] = useState<Servicio[]>([]);
+  const [buscandoItems, setBuscandoItems] = useState(false);
 
   useEffect(() => {
     if (!abierto) return;
@@ -113,8 +114,10 @@ export function FacturaFormDrawer({
     setNotas(factura?.notas ?? "");
     setTerminos(factura?.terminos ?? "");
     setBusqueda("");
+    setProductosHallados([]);
+    setServiciosHallados([]);
     setLineas((factura?.items ?? []).map((item) => {
-      const aplicaInventario = item.aplicaInventario || Boolean(productos.find((p) => p.id === item.productoId)?.aplicaInventario);
+      const aplicaInventario = item.aplicaInventario;
       return {
         key: nuevaKey(),
         producto_id: item.productoId,
@@ -131,8 +134,7 @@ export function FacturaFormDrawer({
       };
     }));
     for (const item of factura?.items ?? []) {
-      const aplicaInventario = item.aplicaInventario || Boolean(productos.find((p) => p.id === item.productoId)?.aplicaInventario);
-      if (item.productoId && aplicaInventario) void onCargarExistencias(item.productoId);
+      if (item.productoId && item.aplicaInventario) void onCargarExistencias(item.productoId);
     }
   }, [abierto, factura]);
 
@@ -141,25 +143,65 @@ export function FacturaFormDrawer({
     setFormaPagoId((actual) => actual ?? formasPago[0]?.id ?? null);
   }, [abierto, factura, formasPago]);
 
+  const buscarClientes = useCallback(async (texto: string): Promise<OpcionBuscador[]> => {
+    if (!token) return [];
+    const respuesta = await listarClientes(token, {
+      page: 1,
+      size: 20,
+      search: texto.trim() || undefined,
+    });
+    return respuesta.data.map((cliente) => ({
+      id: cliente.id,
+      label: cliente.nombres,
+      extra: cliente.identificacion ?? "",
+    }));
+  }, [token]);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const termino = busqueda.trim();
+    if (termino.length < 2) {
+      setProductosHallados([]);
+      setServiciosHallados([]);
+      setBuscandoItems(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setBuscandoItems(true);
+      try {
+        const [prods, servs] = await Promise.all([
+          listarProductos(token, { page: 1, size: 20, search: termino, activo: true }),
+          listarServicios(token, { page: 1, size: 20, search: termino, activo: true }),
+        ]);
+        setProductosHallados(prods.data);
+        setServiciosHallados(servs.data);
+      } catch {
+        setProductosHallados([]);
+        setServiciosHallados([]);
+      } finally {
+        setBuscandoItems(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [abierto, busqueda, token]);
+
   const itemsFiltrados = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase();
-    if (termino.length < 2) return [];
-    const prods = productos.filter((p) => `${p.codigo} ${p.nombre}`.toLowerCase().includes(termino)).map((p) => ({
+    const prods = productosHallados.map((p) => ({
       tipo: "producto" as const,
       id: p.id,
       label: p.nombre,
       extra: `${p.codigo} · ${TIPOS_IMPUESTO.find((t) => t.value === p.tipoImpuesto)?.label ?? p.tipoImpuesto} · ${p.aplicaInventario ? `stock ${p.stockTotal}` : "sin inventario"}`,
       precio: p.precioVenta,
     }));
-    const servs = servicios.filter((s) => `${s.codigo} ${s.nombre}`.toLowerCase().includes(termino)).map((s) => ({
+    const servs = serviciosHallados.map((s) => ({
       tipo: "servicio" as const,
       id: s.id,
       label: s.nombre,
       extra: `${s.codigo} · ${TIPOS_IMPUESTO.find((t) => t.value === s.tipoImpuesto)?.label ?? s.tipoImpuesto}`,
       precio: s.precioVenta,
     }));
-    return [...prods, ...servs].slice(0, 12);
-  }, [busqueda, productos, servicios]);
+    return [...prods, ...servs];
+  }, [productosHallados, serviciosHallados]);
 
   const lineasCalc = useMemo(() => lineas.map((linea) => ({ linea, calc: recalc(linea) })), [lineas]);
 
@@ -183,8 +225,8 @@ export function FacturaFormDrawer({
   }
 
   async function agregarItem(tipo: "producto" | "servicio", id: number) {
-    const producto = tipo === "producto" ? productos.find((p) => p.id === id) : undefined;
-    const servicio = tipo === "servicio" ? servicios.find((s) => s.id === id) : undefined;
+    const producto = tipo === "producto" ? productosHallados.find((p) => p.id === id) : undefined;
+    const servicio = tipo === "servicio" ? serviciosHallados.find((s) => s.id === id) : undefined;
     const origen = producto ?? servicio;
     if (!origen) return;
     const key = nuevaKey();
@@ -269,9 +311,15 @@ export function FacturaFormDrawer({
                 <div>
                   <Label>Cliente</Label>
                   <BuscadorSelect
-                    opciones={clientes.map((c) => ({ id: c.id, label: c.nombres, extra: c.identificacion ?? "" }))}
+                    opciones={[]}
                     valor={clienteId}
                     onChange={setClienteId}
+                    onBuscar={buscarClientes}
+                    opcionFija={factura?.clienteId ? {
+                      id: factura.clienteId,
+                      label: factura.clienteNombres || "Cliente",
+                      extra: factura.clienteIdentificacion ?? "",
+                    } : null}
                     placeholder="Buscar cliente"
                   />
                 </div>
@@ -288,7 +336,11 @@ export function FacturaFormDrawer({
 
             <div>
               <Label>Agregar producto o servicio</Label>
-              <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Escribe al menos 2 caracteres" />
+              <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Busca por código o nombre" />
+              {buscandoItems && <p className="mt-1 text-xs text-muted-foreground">Buscando productos y servicios...</p>}
+              {busqueda.trim().length >= 2 && !buscandoItems && itemsFiltrados.length === 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">Sin productos ni servicios para esa búsqueda.</p>
+              )}
               {itemsFiltrados.length > 0 && (
                 <div className="mt-1 rounded-md border bg-background shadow-sm max-h-48 overflow-y-auto">
                   {itemsFiltrados.map((item) => (

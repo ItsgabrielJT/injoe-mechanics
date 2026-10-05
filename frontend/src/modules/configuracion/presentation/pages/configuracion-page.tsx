@@ -141,9 +141,10 @@ export function ConfiguracionPage() {
           <div>
             <Label>Entorno SRI</Label>
             <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm bg-background" value={empresa.entornoSri} onChange={(e) => setEmpresa({ ...empresa, entornoSri: e.target.value })}>
-              <option value="1">Pruebas</option>
-              <option value="2">Producción</option>
+              <option value="1">1 — Pruebas</option>
+              <option value="2">2 — Producción</option>
             </select>
+            <p className="mt-1 text-xs text-muted-foreground">Ese código (1 o 2) viaja al SRI al firmar. Las facturas ya enviadas conservan el ambiente con el que salieron.</p>
           </div>
         </div>
         <Button type="submit" disabled={guardando}>Guardar empresa</Button>

@@ -3,6 +3,7 @@
 import { Document, Image, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import JsBarcode from "jsbarcode";
 import { env } from "@/config/env";
+import { etiquetaAmbienteComprobante } from "@/modules/facturacion/domain/ambiente";
 import type { Factura } from "@/modules/facturacion/domain/entities";
 import type { TipoImpuesto } from "@/modules/inventario/domain/entities";
 
@@ -91,8 +92,12 @@ function etiquetaIva(tipo: TipoImpuesto): string {
   return "0.00%";
 }
 
-function ambiente(entorno?: string): string {
-  return entorno === "2" ? "PRODUCCIÓN" : "PRUEBAS";
+function ambiente(factura: Factura, entornoEmpresa?: string): string {
+  return etiquetaAmbienteComprobante({
+    claveAcceso: factura.claveAcceso || factura.numeroAutorizacion,
+    xmlContent: factura.xmlContent,
+    fallback: entornoEmpresa,
+  });
 }
 
 function fechaCorta(valor?: string | null): string {
@@ -212,7 +217,7 @@ function InvoicePDFDocument({
             <Text style={styles.authValue}>{partirClave(clave)}</Text>
             <Text style={styles.authLabel}>Fecha y Hora de Autorización:</Text>
             <Text style={styles.authValue}>{fechaHora(factura.fechaAutorizacion) || "-"}</Text>
-            <View style={styles.row}><Text style={styles.label}>Ambiente:</Text><Text style={styles.value}>{ambiente(empresa.entornoSri)}</Text></View>
+            <View style={styles.row}><Text style={styles.label}>Ambiente:</Text><Text style={styles.value}>{ambiente(factura, empresa.entornoSri)}</Text></View>
             <View style={styles.row}><Text style={styles.label}>Emisión:</Text><Text style={styles.value}>NORMAL</Text></View>
             <View style={styles.barcodeBox}>
               <Text style={styles.barcodeLabel}>Clave de Acceso</Text>

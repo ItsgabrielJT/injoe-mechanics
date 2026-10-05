@@ -15,7 +15,7 @@ class ActualizarEmpresaCommand:
     direccion: str
     telefono: str | None = None
     correo: str | None = None
-    entorno_sri: str = "1"
+    entorno_sri: str | None = None
 
 
 @dataclass(frozen=True)

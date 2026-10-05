@@ -1,6 +1,7 @@
 "use client";
 
 import { Calculator, Mail, Phone, User, Warehouse, X } from "lucide-react";
+import { etiquetaAmbienteComprobante } from "@/modules/facturacion/domain/ambiente";
 import { nombreCliente, type Factura } from "@/modules/facturacion/domain/entities";
 import { ChipEstado } from "@/modules/facturacion/presentation/components/chip-estado";
 import { Portal } from "@/shared/components/portal";
@@ -12,10 +13,11 @@ function dinero(valor: number): string {
 
 interface Props {
   factura: Factura | null;
+  entornoSri?: string;
   onClose: () => void;
 }
 
-export function FacturaDetalleDialog({ factura, onClose }: Props) {
+export function FacturaDetalleDialog({ factura, entornoSri, onClose }: Props) {
   if (!factura) return null;
   const cliente = nombreCliente(factura);
 
@@ -55,6 +57,16 @@ export function FacturaDetalleDialog({ factura, onClose }: Props) {
                   {factura.fechaAutorizacion && (
                     <div className="flex justify-between"><span className="text-muted-foreground">Autorización</span><span>{factura.fechaAutorizacion.slice(0, 10)}</span></div>
                   )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Ambiente SRI</span>
+                    <span className="font-medium">
+                      {etiquetaAmbienteComprobante({
+                        claveAcceso: factura.claveAcceso || factura.numeroAutorizacion,
+                        xmlContent: factura.xmlContent,
+                        fallback: entornoSri,
+                      })}
+                    </span>
+                  </div>
                 </section>
               </div>
 

@@ -15,6 +15,7 @@ from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas
 
 from app.core.config import settings
+from app.modules.facturacion.domain.ambiente import etiqueta_ambiente_comprobante
 from app.modules.facturacion.domain.entities import CONSUMIDOR_FINAL_IDENTIFICACION, CONSUMIDOR_FINAL_NOMBRE, Factura, TipoReceptor
 from app.modules.facturacion.infrastructure.info_adicional import filas_info_adicional
 
@@ -30,8 +31,12 @@ def _dinero(valor) -> str:
     return f"{float(valor or 0):.2f}"
 
 
-def _ambiente(empresa) -> str:
-    return "PRODUCCIÓN" if str(getattr(empresa, "entorno_sri", "1")) == "2" else "PRUEBAS"
+def _ambiente(factura: Factura, empresa) -> str:
+    return etiqueta_ambiente_comprobante(
+        factura.clave_acceso or factura.numero_autorizacion,
+        factura.xml_content,
+        getattr(empresa, "entorno_sri", None),
+    )
 
 
 def _logo(empresa) -> Path | None:
@@ -158,7 +163,7 @@ def generar_pdf_factura(factura: Factura, empresa, punto) -> bytes:
         factura.fecha_autorizacion.strftime("%d/%m/%Y %H:%M:%S") if factura.fecha_autorizacion else "-",
         wrap=True,
     )
-    fila_der("Ambiente:", _ambiente(empresa))
+    fila_der("Ambiente:", _ambiente(factura, empresa))
     fila_der("Emisión:", "NORMAL")
 
     pdf.setFont("Helvetica", 6)

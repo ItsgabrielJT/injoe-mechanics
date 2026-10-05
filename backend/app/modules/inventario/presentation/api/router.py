@@ -228,7 +228,7 @@ async def listar_productos(
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarProductosUseCase, Depends(get_listar_productos_use_case)],
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=200),
+    size: int = Query(10, ge=1, le=1000),
     search: str | None = Query(None),
     categoria_id: int | None = Query(None),
     activo: bool | None = Query(None),

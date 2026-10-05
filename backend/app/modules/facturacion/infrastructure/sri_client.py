@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.modules.configuracion.domain.entorno_sri import normalizar_entorno_sri
 from app.modules.facturacion.infrastructure.info_adicional import additional_info_sri
 from app.modules.facturacion.domain.entities import (
     CONSUMIDOR_FINAL_IDENTIFICACION,
@@ -166,7 +167,11 @@ def construir_payload(factura: Factura, empresa, punto, environment: str) -> dic
 
 
 async def firmar_factura(factura: Factura, empresa, punto) -> dict[str, Any]:
-    environment = empresa.entorno_sri or settings.SRI_ENVIRONMENT
+    environment = (
+        normalizar_entorno_sri(empresa.entorno_sri)
+        or normalizar_entorno_sri(settings.SRI_ENVIRONMENT)
+        or "1"
+    )
     payload = construir_payload(factura, empresa, punto, environment)
     async with httpx.AsyncClient(timeout=90) as client:
         key = await _api_key(client)

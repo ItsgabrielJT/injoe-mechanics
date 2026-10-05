@@ -59,15 +59,35 @@ interface BuscadorSelectProps {
   placeholder?: string;
   disabled?: boolean;
   error?: boolean;
+  onBuscar?: (texto: string) => Promise<OpcionBuscador[]>;
+  opcionFija?: OpcionBuscador | null;
 }
 
-export function BuscadorSelect({ opciones, valor, onChange, placeholder = "Buscar...", disabled, error }: BuscadorSelectProps) {
+export function BuscadorSelect({
+  opciones,
+  valor,
+  onChange,
+  placeholder = "Buscar...",
+  disabled,
+  error,
+  onBuscar,
+  opcionFija,
+}: BuscadorSelectProps) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState("");
+  const [remotos, setRemotos] = useState<OpcionBuscador[]>([]);
+  const [seleccionLocal, setSeleccionLocal] = useState<OpcionBuscador | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const onBuscarRef = useRef(onBuscar);
+  onBuscarRef.current = onBuscar;
   const contenedor = useCerrarAlClickFuera(abierto, () => setAbierto(false));
-  const seleccionado = opciones.find((item) => item.id === valor) ?? null;
+  const seleccionado = opciones.find((item) => item.id === valor)
+    ?? remotos.find((item) => item.id === valor)
+    ?? (seleccionLocal?.id === valor ? seleccionLocal : null)
+    ?? (opcionFija?.id === valor ? opcionFija : null);
 
   const filtradas = useMemo(() => {
+    if (onBuscar) return remotos;
     const termino = texto.trim().toLowerCase();
     if (!termino) {
       return opciones.slice(0, 20);
@@ -75,13 +95,33 @@ export function BuscadorSelect({ opciones, valor, onChange, placeholder = "Busca
     return opciones
       .filter((item) => `${item.label} ${item.extra ?? ""}`.toLowerCase().includes(termino))
       .slice(0, 20);
-  }, [opciones, texto]);
+  }, [onBuscar, opciones, remotos, texto]);
 
   useEffect(() => {
     if (!abierto) {
       setTexto("");
     }
   }, [abierto]);
+
+  useEffect(() => {
+    if (valor == null) setSeleccionLocal(null);
+  }, [valor]);
+
+  useEffect(() => {
+    if (!abierto || !onBuscarRef.current) return;
+    const buscar = onBuscarRef.current;
+    const timer = setTimeout(async () => {
+      setCargando(true);
+      try {
+        setRemotos(await buscar(texto));
+      } catch {
+        setRemotos([]);
+      } finally {
+        setCargando(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [abierto, texto]);
 
   return (
     <div ref={contenedor} className="relative">
@@ -121,7 +161,8 @@ export function BuscadorSelect({ opciones, valor, onChange, placeholder = "Busca
             onChange={(event) => setTexto(event.target.value)}
           />
           <ul className="max-h-48 overflow-y-auto py-1">
-            {filtradas.length === 0 && <li className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</li>}
+            {cargando && <li className="px-3 py-2 text-sm text-muted-foreground">Buscando...</li>}
+            {!cargando && filtradas.length === 0 && <li className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</li>}
             {filtradas.map((item) => (
               <li key={item.id}>
                 <button
@@ -131,6 +172,7 @@ export function BuscadorSelect({ opciones, valor, onChange, placeholder = "Busca
                     item.id === valor && "bg-primary/10",
                   )}
                   onClick={() => {
+                    setSeleccionLocal(item);
                     onChange(item.id);
                     setAbierto(false);
                   }}

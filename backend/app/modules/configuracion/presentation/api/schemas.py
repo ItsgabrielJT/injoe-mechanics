@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.modules.configuracion.application.dto import ActualizarEmpresaCommand, GuardarPuntoCommand
 from app.modules.configuracion.domain.entities import EmpresaConfig, PuntoEmisionConfig
@@ -10,10 +10,30 @@ class EmpresaUpdateRequest(BaseModel):
     direccion: str = Field(..., min_length=3)
     telefono: str | None = None
     correo: str | None = None
-    entorno_sri: str = "1"
+    entorno_sri: str | None = None
+    ambiente: str | None = None
+    sri_environment: str | None = None
+    environment: str | None = None
+
+    @field_validator("entorno_sri", "ambiente", "sri_environment", "environment", mode="before")
+    @classmethod
+    def _entorno_a_texto(cls, valor: object) -> str | None:
+        if valor is None:
+            return None
+        return str(valor)
 
     def to_command(self) -> ActualizarEmpresaCommand:
-        return ActualizarEmpresaCommand(**self.model_dump())
+        raw = next(
+            (
+                valor
+                for valor in (self.entorno_sri, self.ambiente, self.sri_environment, self.environment)
+                if valor is not None and str(valor).strip() != ""
+            ),
+            None,
+        )
+        data = self.model_dump(exclude={"ambiente", "sri_environment", "environment"})
+        data["entorno_sri"] = raw
+        return ActualizarEmpresaCommand(**data)
 
 
 class SriIdRequest(BaseModel):

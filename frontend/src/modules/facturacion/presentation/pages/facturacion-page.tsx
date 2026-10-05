@@ -4,12 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
 import { Ban, BarChart3, FileText, Loader2, Plus, Search, Send, Trash2 } from "lucide-react";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
-import { listarClientes } from "@/modules/clientes/infrastructure/clientes-api";
-import type { Cliente } from "@/modules/clientes/domain/entities";
-import { listarBodegas, listarExistencias, listarProductos } from "@/modules/inventario/infrastructure/inventario-api";
-import type { Bodega, Existencia, Producto } from "@/modules/inventario/domain/entities";
-import { listarServicios } from "@/modules/servicios/infrastructure/servicios-api";
-import type { Servicio } from "@/modules/servicios/domain/entities";
+import { listarBodegas, listarExistencias } from "@/modules/inventario/infrastructure/inventario-api";
+import type { Bodega, Existencia } from "@/modules/inventario/domain/entities";
 import { obtenerEmpresa } from "@/modules/configuracion/infrastructure/configuracion-api";
 import {
   etiquetaEstado,
@@ -74,9 +70,6 @@ export function FacturacionPage() {
   const [detalle, setDetalle] = useState<Factura | null>(null);
   const [reporteUrl, setReporteUrl] = useState<string | null>(null);
   const [generandoReporte, setGenerandoReporte] = useState(false);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [servicios, setServicios] = useState<Servicio[]>([]);
   const [formas, setFormas] = useState<FormaPago[]>([]);
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [existencias, setExistencias] = useState<Record<number, Existencia[]>>({});
@@ -120,17 +113,11 @@ export function FacturacionPage() {
 
   const cargarCatalogos = useCallback(async () => {
     if (!token) return;
-    const [cli, prods, servs, fps, emp, bds] = await Promise.all([
-      listarClientes(token, { page: 1, size: 100 }),
-      listarProductos(token, { page: 1, size: 100, activo: true }),
-      listarServicios(token, { page: 1, size: 100, activo: true }),
+    const [fps, emp, bds] = await Promise.all([
       listarFormasPago(token),
       obtenerEmpresa(token),
       listarBodegas(token, { page: 1, size: 100, activo: true }),
     ]);
-    setClientes(cli.data);
-    setProductos(prods.data);
-    setServicios(servs.data);
     setFormas(fps);
     setBodegas(bds.data);
     setEmpresa({
@@ -212,7 +199,7 @@ export function FacturacionPage() {
       renderCell: ({ row }) => (
         <div className="flex gap-1">
           <Button size="icon" variant="ghost" title="Detalle" onClick={() => void abrirDetalle(row)}><Search className="h-4 w-4" /></Button>
-          <Button size="icon" variant="ghost" title="PDF" onClick={() => void descargarPdfFactura(row, empresa)}><FileText className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" title="PDF" onClick={() => void descargarPdf(row)}><FileText className="h-4 w-4" /></Button>
           {(row.estado === "BORRADOR" || row.estado === "RECHAZADA") && (
             <Button size="sm" variant="outline" onClick={() => { setEdicion(row); setDrawer(true); }}>Editar</Button>
           )}
@@ -236,6 +223,15 @@ export function FacturacionPage() {
       ),
     },
   ], [empresa, enviandoId, token]);
+
+  async function descargarPdf(row: Factura) {
+    try {
+      const completa = await obtenerFactura(token, row.id);
+      await descargarPdfFactura(completa, empresa);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo generar el PDF");
+    }
+  }
 
   async function guardar(body: FacturaInput) {
     setGuardando(true);
@@ -372,11 +368,9 @@ export function FacturacionPage() {
 
       <FacturaFormDrawer
         abierto={drawer}
+        token={token}
         cargando={guardando}
         factura={edicion}
-        clientes={clientes}
-        productos={productos}
-        servicios={servicios}
         formasPago={formas}
         bodegas={bodegas}
         existencias={existencias}
@@ -384,7 +378,7 @@ export function FacturacionPage() {
         onClose={() => { setDrawer(false); setEdicion(null); }}
         onSubmit={guardar}
       />
-      <FacturaDetalleDialog factura={detalle} onClose={() => setDetalle(null)} />
+      <FacturaDetalleDialog factura={detalle} entornoSri={empresa.entornoSri} onClose={() => setDetalle(null)} />
       {reporteUrl && (
         <Portal>
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">

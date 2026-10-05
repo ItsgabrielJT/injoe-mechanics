@@ -34,7 +34,7 @@ async def listar_servicios(
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarServiciosUseCase, Depends(get_listar_servicios_use_case)],
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=1000),
     search: str | None = Query(None),
     categoria: CategoriaServicio | None = Query(None),
     activo: bool | None = Query(None),

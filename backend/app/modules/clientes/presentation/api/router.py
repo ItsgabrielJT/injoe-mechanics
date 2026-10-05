@@ -60,7 +60,7 @@ async def listar_clientes(
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarClientesUseCase, Depends(get_listar_clientes_use_case)],
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=1000),
     search: str | None = Query(None),
     tipo_cliente: TipoCliente | None = Query(None),
     activo: bool | None = Query(None),
