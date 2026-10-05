@@ -18,8 +18,6 @@ import {
   listarEstadoVehiculoReporte,
   obtenerHistorialVehiculo,
 } from "@/modules/estado-vehiculo/infrastructure/estado-vehiculo-api";
-import { blobHistorialVehiculo } from "@/modules/estado-vehiculo/presentation/pdf/estado-vehiculo-historial-pdf";
-import { blobReporteEstadoVehiculo } from "@/modules/estado-vehiculo/presentation/pdf/estado-vehiculo-reporte-pdf";
 import { formatoMoneda, type OrdenTrabajo } from "@/modules/ordenes-trabajo/domain/entities";
 import { obtenerOrden } from "@/modules/ordenes-trabajo/infrastructure/ordenes-api";
 import { OrdenDetalleDialog } from "@/modules/ordenes-trabajo/presentation/modals/orden-detalle-dialog";
@@ -159,6 +157,9 @@ export function EstadoVehiculoPage() {
     setGenerando(true);
     try {
       const { data, totales: tot } = await listarEstadoVehiculoReporte(token, query);
+      const { blobReporteEstadoVehiculo } = await import(
+        "@/modules/estado-vehiculo/presentation/pdf/estado-vehiculo-reporte-pdf"
+      );
       const blob = await blobReporteEstadoVehiculo({
         vehiculos: data,
         totales: tot,
@@ -180,6 +181,9 @@ export function EstadoVehiculoPage() {
         fecha_desde: query.fecha_desde,
         fecha_hasta: query.fecha_hasta,
       });
+      const { blobHistorialVehiculo } = await import(
+        "@/modules/estado-vehiculo/presentation/pdf/estado-vehiculo-historial-pdf"
+      );
       const blob = await blobHistorialVehiculo({
         historial,
         empresa: empresaNombre,

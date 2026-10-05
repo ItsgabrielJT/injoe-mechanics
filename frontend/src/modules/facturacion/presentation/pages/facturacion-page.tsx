@@ -31,8 +31,6 @@ import { ChipEstado } from "@/modules/facturacion/presentation/components/chip-e
 import { FacturaFormDrawer } from "@/modules/facturacion/presentation/forms/factura-form-drawer";
 import { FacturaDetalleDialog } from "@/modules/facturacion/presentation/modals/factura-detalle-dialog";
 import { FacturacionEstadisticas } from "@/modules/facturacion/presentation/pages/facturacion-estadisticas";
-import { blobReporteFacturas } from "@/modules/facturacion/presentation/pdf/factura-reporte-pdf";
-import { descargarPdfFactura } from "@/modules/facturacion/presentation/pdf/invoice-pdf";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { MuiDataTable } from "@/shared/components/MuiDataTable";
 import { Portal } from "@/shared/components/portal";
@@ -156,6 +154,16 @@ export function FacturacionPage() {
     }
   }
 
+  const descargarPdf = useCallback(async (row: Factura) => {
+    try {
+      const { descargarPdfFactura } = await import("@/modules/facturacion/presentation/pdf/invoice-pdf");
+      const completa = await obtenerFactura(token, row.id);
+      await descargarPdfFactura(completa, empresa);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo generar el PDF");
+    }
+  }, [empresa, token]);
+
   const columns = useMemo<GridColDef[]>(() => [
     {
       field: "numero",
@@ -222,16 +230,7 @@ export function FacturacionPage() {
         </div>
       ),
     },
-  ], [empresa, enviandoId, token]);
-
-  async function descargarPdf(row: Factura) {
-    try {
-      const completa = await obtenerFactura(token, row.id);
-      await descargarPdfFactura(completa, empresa);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo generar el PDF");
-    }
-  }
+  ], [descargarPdf, enviandoId, token]);
 
   async function guardar(body: FacturaInput) {
     setGuardando(true);
@@ -279,6 +278,7 @@ export function FacturacionPage() {
     setGenerandoReporte(true);
     try {
       const facturas = await listarFacturasReporte(token, filtros);
+      const { blobReporteFacturas } = await import("@/modules/facturacion/presentation/pdf/factura-reporte-pdf");
       const blob = await blobReporteFacturas({
         facturas,
         totales,
