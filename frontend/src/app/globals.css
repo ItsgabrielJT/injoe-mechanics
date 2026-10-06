@@ -40,3 +40,65 @@
     @apply bg-background text-foreground min-h-dvh overflow-x-hidden;
   }
 }
+
+/* Fuera de @layer para ganar a las utilities de Tailwind en el rail colapsado. */
+.sidebar-desktop {
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+  z-index: 30;
+  display: none;
+  height: 100dvh;
+  width: 15rem;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right-width: 1px;
+  border-color: hsl(var(--sidebar-border));
+  background-color: hsl(var(--sidebar-background));
+  padding: 0.75rem;
+  transition: width 200ms ease, padding 200ms ease, box-shadow 200ms ease;
+}
+
+@media (min-width: 1024px) {
+  .sidebar-desktop {
+    display: flex;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-desktop {
+    width: 4rem;
+    padding: 0.5rem;
+  }
+
+  .sidebar-desktop:hover,
+  .sidebar-desktop[data-expanded="true"] {
+    width: 15rem;
+    padding: 0.75rem;
+    box-shadow: var(--shadow-elegant);
+  }
+
+  .sidebar-desktop[data-expanded="true"] {
+    overflow: visible;
+  }
+
+  .sidebar-desktop:not(:hover):not([data-expanded="true"]) .sidebar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .sidebar-desktop:not(:hover):not([data-expanded="true"]) .sidebar-center {
+    justify-content: center;
+    gap: 0;
+    padding-left: 0.125rem;
+    padding-right: 0.125rem;
+  }
+}
