@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
-import { ClipboardList, Eye, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { crearCliente, listarClientes } from "@/modules/clientes/infrastructure/clientes-api";
+import { ClipboardList, Download, Eye, FileText, Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
+import { crearCliente, listarClientes, obtenerCliente } from "@/modules/clientes/infrastructure/clientes-api";
+import { obtenerEmpresa } from "@/modules/configuracion/infrastructure/configuracion-api";
 import type { Cliente } from "@/modules/clientes/domain/entities";
 import { crearDesdeOrden, listarFormasPago } from "@/modules/facturacion/infrastructure/facturacion-api";
 import type { FormaPago, TipoReceptor } from "@/modules/facturacion/domain/entities";
@@ -14,6 +15,7 @@ import { formatoMoneda, type EstadoOrden, type OrdenInput, type OrdenTrabajo, ty
 import { cerrarOrden, eliminarOrden, guardarOrden, listarOrdenes, listarTecnicos, obtenerOrden } from "@/modules/ordenes-trabajo/infrastructure/ordenes-api";
 import { OrdenTrabajoFormDrawer } from "@/modules/ordenes-trabajo/presentation/forms/orden-trabajo-form-drawer";
 import { OrdenDetalleDialog } from "@/modules/ordenes-trabajo/presentation/modals/orden-detalle-dialog";
+import type { DatosTallerPdf } from "@/modules/ordenes-trabajo/presentation/pdf/orden-trabajo-pdf";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { MuiDataTable } from "@/shared/components/MuiDataTable";
 import { Portal } from "@/shared/components/portal";
@@ -59,6 +61,7 @@ export function OrdenesTrabajoPage() {
   const [nuevoCliente, setNuevoCliente] = useState({ identificacion: "", nombres: "", correo: "" });
   const [clientesFactura, setClientesFactura] = useState<Cliente[]>([]);
   const [formasPago, setFormasPago] = useState<FormaPago[]>([]);
+  const [empresa, setEmpresa] = useState<DatosTallerPdf>({ nombre: "", telefono: "", direccion: "", logoUrl: null });
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 400);
@@ -88,14 +91,21 @@ export function OrdenesTrabajoPage() {
   const cargarCatalogos = useCallback(async () => {
     if (!token) return;
     try {
-      const [tec, bods, cats] = await Promise.all([
+      const [tec, bods, cats, emp] = await Promise.all([
         listarTecnicos(token),
         listarBodegas(token, { page: 1, size: 100, activo: true }),
         listarCategorias(token, { page: 1, size: 100, activo: true }),
+        obtenerEmpresa(token),
       ]);
       setTecnicos(tec);
       setBodegas(bods.data);
       setCategorias(cats.data);
+      setEmpresa({
+        nombre: emp.nombre,
+        telefono: emp.telefono,
+        direccion: emp.direccion,
+        logoUrl: emp.rutaLogo,
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudieron cargar los catálogos");
     }
@@ -169,13 +179,39 @@ export function OrdenesTrabajoPage() {
     }
   }
 
-  async function abrirDetalle(row: OrdenTrabajo) {
+  const abrirDetalle = useCallback(async (row: OrdenTrabajo) => {
     try {
       setDetalle(await obtenerOrden(token, row.id));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo abrir el detalle");
     }
-  }
+  }, [token]);
+
+  const descargarReporte = useCallback(async (row: OrdenTrabajo) => {
+    try {
+      const { descargarPdfOrdenTrabajo } = await import("@/modules/ordenes-trabajo/presentation/pdf/orden-trabajo-pdf");
+      const completa = await obtenerOrden(token, row.id);
+      let celular = "";
+      try {
+        const cliente = await obtenerCliente(token, completa.clienteId);
+        celular = cliente.telefonos[0] || cliente.telefonoFiscal || "";
+      } catch {
+        celular = "";
+      }
+      await descargarPdfOrdenTrabajo(completa, empresa, celular);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo generar el PDF");
+    }
+  }, [empresa, token]);
+
+  const descargarFormato = useCallback(async () => {
+    try {
+      const { descargarFormatoOrdenTrabajo } = await import("@/modules/ordenes-trabajo/presentation/pdf/orden-trabajo-pdf");
+      await descargarFormatoOrdenTrabajo(empresa);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo descargar el formato");
+    }
+  }, [empresa]);
 
   async function abrirEdicion(row: OrdenTrabajo) {
     try {
@@ -187,7 +223,24 @@ export function OrdenesTrabajoPage() {
   }
 
   const columns = useMemo<GridColDef[]>(() => [
-    { field: "numero", headerName: "Número", minWidth: 120, flex: 0.6 },
+    {
+      field: "numero",
+      headerName: "Número",
+      minWidth: 120,
+      flex: 0.6,
+      renderCell: ({ row }) => (
+        <button
+          type="button"
+          className="text-left font-medium text-primary hover:underline"
+          onClick={(event) => {
+            event.stopPropagation();
+            void abrirDetalle(row);
+          }}
+        >
+          {row.numero}
+        </button>
+      ),
+    },
     { field: "clienteNombres", headerName: "Cliente", minWidth: 160, flex: 1 },
     {
       field: "vehiculo",
@@ -216,7 +269,7 @@ export function OrdenesTrabajoPage() {
     {
       field: "acciones",
       headerName: "Acciones",
-      width: 210,
+      width: 250,
       sortable: false,
       filterable: false,
       renderCell: ({ row }) => (
@@ -228,13 +281,18 @@ export function OrdenesTrabajoPage() {
           {row.estado === "EN_PROCESO" && (
             <Button size="icon" variant="ghost" onClick={() => setEliminar(row)}><Trash2 className="h-4 w-4" /></Button>
           )}
+          <Button size="icon" variant="ghost" title="Descargar reporte" aria-label="Descargar reporte" onClick={() => void descargarReporte(row)}>
+            <FileText className="h-4 w-4" />
+          </Button>
           {row.estado === "CERRADA" && !row.facturada && (
-            <Button size="icon" variant="ghost" title="Facturar" aria-label="Facturar" onClick={() => void abrirFacturar(row)}><FileText className="h-4 w-4" /></Button>
+            <Button size="icon" variant="ghost" title="Facturar" aria-label="Facturar" onClick={() => void abrirFacturar(row)}>
+              <Receipt className="h-4 w-4" />
+            </Button>
           )}
         </div>
       ),
     },
-  ], []);
+  ], [abrirDetalle, descargarReporte]);
 
   async function guardar(body: OrdenInput) {
     setGuardando(true);
@@ -259,7 +317,12 @@ export function OrdenesTrabajoPage() {
           <h1 className="text-2xl font-semibold flex items-center gap-2"><ClipboardList className="h-6 w-6 text-primary" /> Órdenes de trabajo</h1>
           <p className="text-sm text-muted-foreground">Lanza la OT con nombre y placa; completa la ficha después en Clientes.</p>
         </div>
-        <Button onClick={() => { setEdicion(null); setDrawer(true); }}><Plus className="h-4 w-4 mr-2" /> Nueva orden</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void descargarFormato()}>
+            <Download className="h-4 w-4 mr-2" /> Descargar formato
+          </Button>
+          <Button onClick={() => { setEdicion(null); setDrawer(true); }}><Plus className="h-4 w-4 mr-2" /> Nueva orden</Button>
+        </div>
       </div>
       {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
       {exito && <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">{exito}</div>}
@@ -307,6 +370,7 @@ export function OrdenesTrabajoPage() {
         onFacturar={(orden) => { void abrirFacturar(orden); setDetalle(null); }}
         onEditar={(orden) => { void abrirEdicion(orden); setDetalle(null); }}
         onCerrar={(orden) => { setCerrar(orden); }}
+        onDescargar={(orden) => { void descargarReporte(orden); }}
       />
       <ConfirmDialog
         open={Boolean(eliminar)}

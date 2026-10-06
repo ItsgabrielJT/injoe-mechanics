@@ -924,12 +924,14 @@ export function OrdenTrabajoFormDrawer({
                   <Input type="datetime-local" value={fechaEntrega} onChange={(event) => setFechaEntrega(event.target.value)} />
                 </div>
                 <div className="space-y-2 sm:col-span-2">
-                  <Label>Notas generales</Label>
-                  <textarea className="flex min-h-20 w-full rounded-md border border-input px-3 py-2 text-sm" value={notasGenerales} onChange={(event) => setNotasGenerales(event.target.value)} />
+                  <Label>Nota</Label>
+                  <p className="text-xs text-muted-foreground">Se imprime en Observaciones del reporte (junto a las vistas del vehículo).</p>
+                  <textarea className="flex min-h-20 w-full rounded-md border border-input px-3 py-2 text-sm" value={notasGenerales} onChange={(event) => setNotasGenerales(event.target.value)} placeholder="Golpes, accesorios o comentarios de recepción" />
                 </div>
                 <div className="space-y-2 sm:col-span-2">
-                  <Label>Notas técnicas</Label>
-                  <textarea className="flex min-h-20 w-full rounded-md border border-input px-3 py-2 text-sm" value={notasTecnicas} onChange={(event) => setNotasTecnicas(event.target.value)} />
+                  <Label>Descripción de la falla</Label>
+                  <p className="text-xs text-muted-foreground">Se imprime en Descripción de la falla del reporte.</p>
+                  <textarea className="flex min-h-20 w-full rounded-md border border-input px-3 py-2 text-sm" value={notasTecnicas} onChange={(event) => setNotasTecnicas(event.target.value)} placeholder="Qué reporta el cliente o qué se va a revisar" />
                 </div>
               </div>
             </section>

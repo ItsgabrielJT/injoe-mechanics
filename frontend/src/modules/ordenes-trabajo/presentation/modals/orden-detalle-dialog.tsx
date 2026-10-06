@@ -23,9 +23,10 @@ interface Props {
   onEditar?: (orden: OrdenTrabajo) => void;
   onCerrar?: (orden: OrdenTrabajo) => void;
   onFacturar?: (orden: OrdenTrabajo) => void;
+  onDescargar?: (orden: OrdenTrabajo) => void;
 }
 
-export function OrdenDetalleDialog({ detalle, onClose, soloLectura, onEditar, onCerrar, onFacturar }: Props) {
+export function OrdenDetalleDialog({ detalle, onClose, soloLectura, onEditar, onCerrar, onFacturar, onDescargar }: Props) {
   const totales = useMemo(() => {
     if (!detalle) return { venta: 0, costo: 0, utilidad: 0 };
     return detalle.items.reduce(
@@ -61,8 +62,8 @@ export function OrdenDetalleDialog({ detalle, onClose, soloLectura, onEditar, on
               <p><span className="text-muted-foreground">Inicio: </span>{fechaCorta(detalle.fechaInicio)}</p>
               <p><span className="text-muted-foreground">Entrega: </span>{fechaCorta(detalle.fechaEntrega)}</p>
             </div>
-            {detalle.notasGenerales && <p><span className="text-muted-foreground">Notas: </span>{detalle.notasGenerales}</p>}
-            {detalle.notasTecnicas && <p><span className="text-muted-foreground">Notas técnicas: </span>{detalle.notasTecnicas}</p>}
+            {detalle.notasGenerales && <p><span className="text-muted-foreground">Nota: </span>{detalle.notasGenerales}</p>}
+            {detalle.notasTecnicas && <p><span className="text-muted-foreground">Descripción de la falla: </span>{detalle.notasTecnicas}</p>}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -96,15 +97,20 @@ export function OrdenDetalleDialog({ detalle, onClose, soloLectura, onEditar, on
               </table>
             </div>
           </div>
-          {!soloLectura && detalle.estado === "CERRADA" && !detalle.facturada && onFacturar && (
-            <div className="flex justify-end gap-2 border-t px-6 py-4">
-              <Button onClick={() => onFacturar(detalle)}>Facturar</Button>
-            </div>
-          )}
-          {!soloLectura && detalle.estado === "EN_PROCESO" && (
-            <div className="flex justify-end gap-2 border-t px-6 py-4">
-              {onEditar && <Button variant="outline" onClick={() => onEditar(detalle)}>Editar</Button>}
-              {onCerrar && <Button onClick={() => onCerrar(detalle)}>Cerrar orden</Button>}
+          {(onDescargar || (!soloLectura && (onEditar || onCerrar || onFacturar))) && (
+            <div className="flex flex-wrap justify-end gap-2 border-t px-6 py-4">
+              {onDescargar && (
+                <Button variant="outline" onClick={() => onDescargar(detalle)}>Descargar reporte</Button>
+              )}
+              {!soloLectura && detalle.estado === "EN_PROCESO" && onEditar && (
+                <Button variant="outline" onClick={() => onEditar(detalle)}>Editar</Button>
+              )}
+              {!soloLectura && detalle.estado === "EN_PROCESO" && onCerrar && (
+                <Button onClick={() => onCerrar(detalle)}>Cerrar orden</Button>
+              )}
+              {!soloLectura && detalle.estado === "CERRADA" && !detalle.facturada && onFacturar && (
+                <Button onClick={() => onFacturar(detalle)}>Facturar</Button>
+              )}
             </div>
           )}
         </div>
