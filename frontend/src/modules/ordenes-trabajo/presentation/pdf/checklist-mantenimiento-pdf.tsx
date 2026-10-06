@@ -265,7 +265,7 @@ function Bloque({
         <Text style={styles.bloqueTitulo}>{titulo}</Text>
       </View>
       {filas.map((item, i) => (
-        <View key={`${titulo}-${i}`} style={[styles.item, i === filas.length - 1 ? styles.itemLast : null]}>
+        <View key={`${titulo}-${i}`} style={i === filas.length - 1 ? [styles.item, styles.itemLast] : styles.item}>
           <View style={styles.box} />
           <Text style={styles.itemTxt}>{item}</Text>
         </View>
