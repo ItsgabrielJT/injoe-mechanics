@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
-import { ClipboardList, Download, Eye, FileText, Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
+import { ClipboardList, ClipboardCheck, Download, Eye, FileText, Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
 import { crearCliente, listarClientes, obtenerCliente } from "@/modules/clientes/infrastructure/clientes-api";
 import { obtenerEmpresa } from "@/modules/configuracion/infrastructure/configuracion-api";
 import type { Cliente } from "@/modules/clientes/domain/entities";
@@ -213,6 +213,15 @@ export function OrdenesTrabajoPage() {
     }
   }, [empresa]);
 
+  const descargarChecklist = useCallback(async () => {
+    try {
+      const { descargarChecklistMantenimiento } = await import("@/modules/ordenes-trabajo/presentation/pdf/checklist-mantenimiento-pdf");
+      await descargarChecklistMantenimiento(empresa);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo descargar el checklist");
+    }
+  }, [empresa]);
+
   async function abrirEdicion(row: OrdenTrabajo) {
     try {
       setEdicion(await obtenerOrden(token, row.id));
@@ -320,6 +329,9 @@ export function OrdenesTrabajoPage() {
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => void descargarFormato()}>
             <Download className="h-4 w-4 mr-2" /> Descargar formato
+          </Button>
+          <Button variant="outline" onClick={() => void descargarChecklist()}>
+            <ClipboardCheck className="h-4 w-4 mr-2" /> Descargar checklist
           </Button>
           <Button onClick={() => { setEdicion(null); setDrawer(true); }}><Plus className="h-4 w-4 mr-2" /> Nueva orden</Button>
         </div>
