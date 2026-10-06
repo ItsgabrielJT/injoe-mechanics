@@ -7,91 +7,6 @@ import type { DatosTallerPdf } from "@/modules/ordenes-trabajo/presentation/pdf/
 const GUIA =
   "Guía de kilometraje: revisión y cambio de aceite cada 10.000 km – servicio mayor cada 20.000 km – bujías y banda cerca de los 40.000 km";
 
-const BLOQUES_IZQ: { titulo: string; icono: IconoCheck; items: string[] }[] = [
-  {
-    titulo: "MOTOR Y ACEITE",
-    icono: "motor",
-    items: [
-      "Nivel y estado del aceite",
-      "Filtro de aceite",
-      "Filtro de aire",
-      "Fugas de aceite",
-      "Ruidos o vibraciones",
-    ],
-  },
-  {
-    titulo: "FRENOS",
-    icono: "frenos",
-    items: [
-      "Balatas (desgaste)",
-      "Discos / tambores",
-      "Nivel de líquido de frenos",
-      "Pedal firme (sin esponja)",
-    ],
-  },
-  {
-    titulo: "SUSPENSIÓN Y DIRECCIÓN",
-    icono: "suspension",
-    items: [
-      "Amortiguadores",
-      "Rótulas y terminales",
-      "Bujes",
-      "Alineación (no jala)",
-    ],
-  },
-  {
-    titulo: "LLANTAS",
-    icono: "llanta",
-    items: [
-      "Profundidad de huella",
-      "Presión (incluida refacción)",
-      "Desgaste parejo",
-      "Rotación",
-    ],
-  },
-];
-
-const BLOQUES_DER: { titulo: string; icono: IconoCheck; items: string[] }[] = [
-  {
-    titulo: "FLUIDOS",
-    icono: "fluido",
-    items: [
-      "Refrigerante / anticongelante",
-      "Líquido de transmisión",
-      "Dirección hidráulica",
-      "Limpia parabrisas",
-    ],
-  },
-  {
-    titulo: "BATERÍA Y ELÉCTRICO",
-    icono: "bateria",
-    items: [
-      "Bornes limpios y apretados",
-      "Carga de la batería",
-      "Alternador",
-    ],
-  },
-  {
-    titulo: "LUCES",
-    icono: "luces",
-    items: [
-      "Faros (alta y baja)",
-      "Cuartos y direccionales",
-      "Stops y reversa",
-    ],
-  },
-  {
-    titulo: "AFINACIÓN",
-    icono: "llave",
-    items: [
-      "Bujías",
-      "Banda de distribución / accesorios",
-      "Sensores",
-      "Limpieza del sistema",
-    ],
-  },
-];
-
 type IconoCheck =
   | "motor"
   | "fluido"
@@ -103,6 +18,98 @@ type IconoCheck =
   | "llave"
   | "notas"
   | "alerta";
+
+type BloqueCheck = { titulo: string; icono: IconoCheck; items: string[] };
+
+const FILAS: [BloqueCheck, BloqueCheck][] = [
+  [
+    {
+      titulo: "MOTOR Y ACEITE",
+      icono: "motor",
+      items: [
+        "Nivel y estado del aceite",
+        "Filtro de aceite",
+        "Filtro de aire",
+        "Fugas de aceite",
+        "Ruidos o vibraciones",
+      ],
+    },
+    {
+      titulo: "FLUIDOS",
+      icono: "fluido",
+      items: [
+        "Refrigerante / anticongelante",
+        "Líquido de transmisión",
+        "Dirección hidráulica",
+        "Limpia parabrisas",
+      ],
+    },
+  ],
+  [
+    {
+      titulo: "FRENOS",
+      icono: "frenos",
+      items: [
+        "Balatas (desgaste)",
+        "Discos / tambores",
+        "Nivel de líquido de frenos",
+        "Pedal firme (sin esponja)",
+      ],
+    },
+    {
+      titulo: "BATERÍA Y ELÉCTRICO",
+      icono: "bateria",
+      items: [
+        "Bornes limpios y apretados",
+        "Carga de la batería",
+        "Alternador",
+      ],
+    },
+  ],
+  [
+    {
+      titulo: "SUSPENSIÓN Y DIRECCIÓN",
+      icono: "suspension",
+      items: [
+        "Amortiguadores",
+        "Rótulas y terminales",
+        "Bujes",
+        "Alineación (no jala)",
+      ],
+    },
+    {
+      titulo: "LUCES",
+      icono: "luces",
+      items: [
+        "Faros (alta y baja)",
+        "Cuartos y direccionales",
+        "Stops y reversa",
+      ],
+    },
+  ],
+  [
+    {
+      titulo: "LLANTAS",
+      icono: "llanta",
+      items: [
+        "Profundidad de huella",
+        "Presión (incluida refacción)",
+        "Desgaste parejo",
+        "Rotación",
+      ],
+    },
+    {
+      titulo: "AFINACIÓN",
+      icono: "llave",
+      items: [
+        "Bujías",
+        "Banda de distribución / accesorios",
+        "Sensores",
+        "Limpieza del sistema",
+      ],
+    },
+  ],
+];
 
 const styles = StyleSheet.create({
   page: {
@@ -127,14 +134,15 @@ const styles = StyleSheet.create({
   campo: { flexDirection: "row", alignItems: "flex-end", flex: 1, marginRight: 8 },
   label: { fontWeight: "bold", fontSize: 9, marginRight: 4 },
   line: { flex: 1, borderBottomWidth: 0.8, borderBottomColor: "#000", minHeight: 12 },
-  cols: { flexDirection: "row", width: "100%", flexGrow: 1, marginBottom: 6 },
-  col: { width: "50%", flexDirection: "column" },
-  colLeft: { paddingRight: 4 },
-  colRight: { paddingLeft: 4 },
-  bloque: { borderWidth: 1.2, borderColor: "#000", marginBottom: 5, flexGrow: 1 },
+  grid: { width: "100%", flexDirection: "column", marginBottom: 4 },
+  fila: { flexDirection: "row", width: "100%", alignItems: "stretch", marginBottom: 4 },
+  bloque: { flex: 1, borderWidth: 1.2, borderColor: "#000", flexDirection: "column" },
+  bloqueIzq: { marginRight: 4 },
+  bloqueDer: { marginLeft: 4 },
   bloqueHead: { flexDirection: "row", alignItems: "center", borderBottomWidth: 1.2, borderBottomColor: "#000", paddingVertical: 4, paddingHorizontal: 6 },
   bloqueTitulo: { fontSize: 9, fontWeight: "bold", marginLeft: 5 },
   item: { flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 6, paddingVertical: 3 },
+  itemLast: { paddingBottom: 5 },
   box: { width: 9, height: 9, borderWidth: 1, borderColor: "#000", marginRight: 6, marginBottom: 1 },
   itemTxt: { flex: 1, fontSize: 8.5, borderBottomWidth: 0.5, borderBottomColor: "#000", paddingBottom: 1 },
   notas: { width: "100%", borderWidth: 1.2, borderColor: "#000", marginBottom: 5 },
@@ -236,15 +244,28 @@ function Campo({ etiqueta }: { etiqueta: string }) {
   );
 }
 
-function Bloque({ titulo, icono, items }: { titulo: string; icono: IconoCheck; items: string[] }) {
+function Bloque({
+  titulo,
+  icono,
+  items,
+  lineas,
+  lado,
+}: {
+  titulo: string;
+  icono: IconoCheck;
+  items: string[];
+  lineas: number;
+  lado: "izq" | "der";
+}) {
+  const filas = Array.from({ length: lineas }, (_, i) => items[i] ?? "");
   return (
-    <View style={styles.bloque} wrap={false}>
+    <View style={[styles.bloque, lado === "izq" ? styles.bloqueIzq : styles.bloqueDer]} wrap={false}>
       <View style={styles.bloqueHead}>
         <Icono tipo={icono} />
         <Text style={styles.bloqueTitulo}>{titulo}</Text>
       </View>
-      {items.map((item) => (
-        <View key={item} style={styles.item}>
+      {filas.map((item, i) => (
+        <View key={`${titulo}-${i}`} style={[styles.item, i === filas.length - 1 ? styles.itemLast : null]}>
           <View style={styles.box} />
           <Text style={styles.itemTxt}>{item}</Text>
         </View>
@@ -290,17 +311,16 @@ function ChecklistMantenimientoDocument({ empresa, logo }: { empresa: DatosTalle
             </View>
           </View>
 
-          <View style={styles.cols}>
-            <View style={[styles.col, styles.colLeft]}>
-              {BLOQUES_IZQ.map((bloque) => (
-                <Bloque key={bloque.titulo} {...bloque} />
-              ))}
-            </View>
-            <View style={[styles.col, styles.colRight]}>
-              {BLOQUES_DER.map((bloque) => (
-                <Bloque key={bloque.titulo} {...bloque} />
-              ))}
-            </View>
+          <View style={styles.grid}>
+            {FILAS.map(([izq, der]) => {
+              const lineas = Math.max(izq.items.length, der.items.length);
+              return (
+                <View key={izq.titulo} style={styles.fila} wrap={false}>
+                  <Bloque {...izq} lineas={lineas} lado="izq" />
+                  <Bloque {...der} lineas={lineas} lado="der" />
+                </View>
+              );
+            })}
           </View>
 
           <View style={styles.notas}>
