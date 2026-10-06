@@ -61,6 +61,7 @@ interface BuscadorSelectProps {
   error?: boolean;
   onBuscar?: (texto: string) => Promise<OpcionBuscador[]>;
   opcionFija?: OpcionBuscador | null;
+  minCaracteres?: number;
 }
 
 export function BuscadorSelect({
@@ -72,6 +73,7 @@ export function BuscadorSelect({
   error,
   onBuscar,
   opcionFija,
+  minCaracteres = 0,
 }: BuscadorSelectProps) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState("");
@@ -107,21 +109,33 @@ export function BuscadorSelect({
     if (valor == null) setSeleccionLocal(null);
   }, [valor]);
 
+  const pendienteMinimo = Boolean(onBuscar) && texto.trim().length < minCaracteres;
+
   useEffect(() => {
     if (!abierto || !onBuscarRef.current) return;
+    if (texto.trim().length < minCaracteres) {
+      setRemotos([]);
+      setCargando(false);
+      return;
+    }
     const buscar = onBuscarRef.current;
+    let cancelado = false;
     const timer = setTimeout(async () => {
       setCargando(true);
       try {
-        setRemotos(await buscar(texto));
+        const resultados = await buscar(texto);
+        if (!cancelado) setRemotos(resultados);
       } catch {
-        setRemotos([]);
+        if (!cancelado) setRemotos([]);
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
     }, 300);
-    return () => clearTimeout(timer);
-  }, [abierto, texto]);
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [abierto, minCaracteres, texto]);
 
   return (
     <div ref={contenedor} className="relative">
@@ -156,14 +170,19 @@ export function BuscadorSelect({
           <input
             autoFocus
             className="h-10 w-full border-b bg-transparent px-3 text-sm outline-none"
-            placeholder="Escribe para buscar"
+            placeholder={minCaracteres > 0 ? `Buscar (mín. ${minCaracteres})` : "Escribe para buscar"}
             value={texto}
             onChange={(event) => setTexto(event.target.value)}
           />
           <ul className="max-h-48 overflow-y-auto py-1">
-            {cargando && <li className="px-3 py-2 text-sm text-muted-foreground">Buscando...</li>}
-            {!cargando && filtradas.length === 0 && <li className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</li>}
-            {filtradas.map((item) => (
+            {pendienteMinimo && (
+              <li className="px-3 py-2 text-sm text-muted-foreground">Escribe al menos {minCaracteres} caracteres</li>
+            )}
+            {!pendienteMinimo && cargando && <li className="px-3 py-2 text-sm text-muted-foreground">Buscando...</li>}
+            {!pendienteMinimo && !cargando && filtradas.length === 0 && (
+              <li className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</li>
+            )}
+            {!pendienteMinimo && filtradas.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"

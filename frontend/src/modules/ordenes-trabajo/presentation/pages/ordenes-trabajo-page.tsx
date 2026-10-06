@@ -8,12 +8,8 @@ import type { Cliente } from "@/modules/clientes/domain/entities";
 import { crearDesdeOrden, listarFormasPago } from "@/modules/facturacion/infrastructure/facturacion-api";
 import type { FormaPago, TipoReceptor } from "@/modules/facturacion/domain/entities";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
-import type { Bodega, CategoriaProducto, Producto } from "@/modules/inventario/domain/entities";
-import { listarBodegas, listarCategorias, listarProductos } from "@/modules/inventario/infrastructure/inventario-api";
-import type { Proveedor } from "@/modules/proveedores/domain/entities";
-import { listarProveedores } from "@/modules/proveedores/infrastructure/proveedores-api";
-import type { Servicio } from "@/modules/servicios/domain/entities";
-import { listarServicios } from "@/modules/servicios/infrastructure/servicios-api";
+import type { Bodega, CategoriaProducto } from "@/modules/inventario/domain/entities";
+import { listarBodegas, listarCategorias } from "@/modules/inventario/infrastructure/inventario-api";
 import { formatoMoneda, type EstadoOrden, type OrdenInput, type OrdenTrabajo, type Tecnico } from "@/modules/ordenes-trabajo/domain/entities";
 import { cerrarOrden, eliminarOrden, guardarOrden, listarOrdenes, listarTecnicos, obtenerOrden } from "@/modules/ordenes-trabajo/infrastructure/ordenes-api";
 import { OrdenTrabajoFormDrawer } from "@/modules/ordenes-trabajo/presentation/forms/orden-trabajo-form-drawer";
@@ -55,9 +51,6 @@ export function OrdenesTrabajoPage() {
   const [eliminar, setEliminar] = useState<OrdenTrabajo | null>(null);
   const [cerrar, setCerrar] = useState<OrdenTrabajo | null>(null);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [servicios, setServicios] = useState<Servicio[]>([]);
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [categorias, setCategorias] = useState<CategoriaProducto[]>([]);
   const [facturar, setFacturar] = useState<OrdenTrabajo | null>(null);
@@ -95,18 +88,12 @@ export function OrdenesTrabajoPage() {
   const cargarCatalogos = useCallback(async () => {
     if (!token) return;
     try {
-      const [tec, prods, servs, provs, bods, cats] = await Promise.all([
+      const [tec, bods, cats] = await Promise.all([
         listarTecnicos(token),
-        listarProductos(token, { page: 1, size: 100, activo: true }),
-        listarServicios(token, { page: 1, size: 100, activo: true }),
-        listarProveedores(token, { page: 1, size: 100, activo: true }),
         listarBodegas(token, { page: 1, size: 100, activo: true }),
         listarCategorias(token, { page: 1, size: 100, activo: true }),
       ]);
       setTecnicos(tec);
-      setProductos(prods.data);
-      setServicios(servs.data);
-      setProveedores(provs.data);
       setBodegas(bods.data);
       setCategorias(cats.data);
     } catch (err) {
@@ -308,9 +295,6 @@ export function OrdenesTrabajoPage() {
         token={token}
         orden={edicion}
         tecnicos={tecnicos}
-        productos={productos}
-        servicios={servicios}
-        proveedores={proveedores}
         bodegas={bodegas}
         categorias={categorias}
         onCatalogoChange={cargarCatalogos}

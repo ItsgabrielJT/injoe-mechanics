@@ -14,12 +14,13 @@ import {
   type Producto,
   type TipoImpuesto,
 } from "@/modules/inventario/domain/entities";
-import { crearCategoria, crearProducto, listarExistencias } from "@/modules/inventario/infrastructure/inventario-api";
-import { BuscadorSelect } from "@/modules/inventario/presentation/components/buscador-select";
+import { crearCategoria, crearProducto, listarExistencias, listarProductos } from "@/modules/inventario/infrastructure/inventario-api";
+import { BuscadorSelect, type OpcionBuscador } from "@/modules/inventario/presentation/components/buscador-select";
 import type { PrecioProveedor, Proveedor } from "@/modules/proveedores/domain/entities";
-import { listarPreciosProducto, listarPreciosServicio } from "@/modules/proveedores/infrastructure/proveedores-api";
+import { listarPreciosProducto, listarPreciosServicio, listarProveedores } from "@/modules/proveedores/infrastructure/proveedores-api";
 import type { Servicio } from "@/modules/servicios/domain/entities";
-import { crearServicio } from "@/modules/servicios/infrastructure/servicios-api";
+import { crearServicio, listarServicios } from "@/modules/servicios/infrastructure/servicios-api";
+import { listarTodasLasPaginas } from "@/modules/ordenes-trabajo/presentation/forms/listar-todas-las-paginas";
 import {
   ahoraEcuadorIso,
   type ItemOrdenInput,
@@ -40,6 +41,7 @@ interface LineaDraft {
   productoId: number | null;
   servicioId: number | null;
   proveedorId: number | null;
+  proveedorNombre: string | null;
   bodegaId: number | null;
   descripcion: string;
   codigo: string | null;
@@ -58,9 +60,6 @@ interface Props {
   token: string;
   orden?: OrdenTrabajo | null;
   tecnicos: Tecnico[];
-  productos: Producto[];
-  servicios: Servicio[];
-  proveedores: Proveedor[];
   bodegas: Bodega[];
   categorias: CategoriaProducto[];
   onCatalogoChange: () => Promise<void>;
@@ -79,6 +78,7 @@ function lineaVacia(tipo: "producto" | "servicio"): LineaDraft {
     productoId: null,
     servicioId: null,
     proveedorId: null,
+    proveedorNombre: null,
     bodegaId: null,
     descripcion: "",
     codigo: null,
@@ -127,6 +127,8 @@ function clavePrecios(tipo: "producto" | "servicio", id: number): string {
   return `${tipo}:${id}`;
 }
 
+const MIN_BUSQUEDA = 3;
+
 function costoRegistrado(precios: PrecioProveedor[], proveedorId: number | null): string {
   if (!proveedorId) return "";
   const hallado = precios.find((item) => item.proveedorId === proveedorId);
@@ -167,9 +169,6 @@ export function OrdenTrabajoFormDrawer({
   token,
   orden,
   tecnicos,
-  productos,
-  servicios,
-  proveedores,
   bodegas,
   categorias,
   onCatalogoChange,
@@ -203,11 +202,17 @@ export function OrdenTrabajoFormDrawer({
   const [lineaActiva, setLineaActiva] = useState<string | null>(null);
   const [preciosPorClave, setPreciosPorClave] = useState<Record<string, PrecioProveedor[]>>({});
   const preciosRef = useRef<Record<string, PrecioProveedor[]>>({});
+  const productosCache = useRef<Map<number, Producto>>(new Map());
+  const serviciosCache = useRef<Map<number, Servicio>>(new Map());
+  const proveedoresCache = useRef<Map<number, Proveedor>>(new Map());
 
   const ordenId = orden?.id ?? null;
 
   useEffect(() => {
     if (!abierto) return;
+    productosCache.current.clear();
+    serviciosCache.current.clear();
+    proveedoresCache.current.clear();
     setError(null);
     setBusqueda("");
     setResultados([]);
@@ -280,6 +285,7 @@ export function OrdenTrabajoFormDrawer({
         productoId: item.productoId,
         servicioId: item.servicioId,
         proveedorId: item.proveedorId,
+        proveedorNombre: item.proveedorNombres,
         bodegaId: item.bodegaId,
         descripcion: item.descripcion,
         codigo: item.codigo,
@@ -289,7 +295,7 @@ export function OrdenTrabajoFormDrawer({
         precioCompra: textoNumero(item.precioCompra),
         aplicaIva: item.aplicaIva,
         tipoImpuesto: item.tipoImpuesto,
-        aplicaInventario: item.productoId ? productos.find((p) => p.id === item.productoId)?.aplicaInventario ?? Boolean(item.bodegaId) : false,
+        aplicaInventario: item.productoId ? Boolean(item.bodegaId) : false,
       }));
       setLineas(cargadas);
       setLineaActiva(cargadas[0]?.key ?? null);
@@ -320,7 +326,7 @@ export function OrdenTrabajoFormDrawer({
   useEffect(() => {
     if (!abierto) return;
     const termino = busqueda.trim();
-    if (termino.length < 2) {
+    if (termino.length < MIN_BUSQUEDA) {
       setResultados([]);
       setClientesHallados([]);
       return;
@@ -329,15 +335,15 @@ export function OrdenTrabajoFormDrawer({
       setBuscando(true);
       try {
         const [vehiculos, clientes] = await Promise.all([
-          listarVehiculos(token, { page: 1, size: 20, search: termino }),
-          listarClientes(token, { page: 1, size: 10, search: termino }),
+          listarTodasLasPaginas((page, size) => listarVehiculos(token, { page, size, search: termino })),
+          listarTodasLasPaginas((page, size) => listarClientes(token, { page, size, search: termino })),
         ]);
-        setResultados(vehiculos.data);
-        if (vehiculos.data.length === 1) {
-          seleccionarVehiculo(vehiculos.data[0]);
+        setResultados(vehiculos);
+        if (vehiculos.length === 1) {
+          seleccionarVehiculo(vehiculos[0]);
           setClientesHallados([]);
-        } else if (vehiculos.data.length === 0) {
-          setClientesHallados(clientes.data);
+        } else if (vehiculos.length === 0) {
+          setClientesHallados(clientes);
         } else {
           setClientesHallados([]);
         }
@@ -347,7 +353,7 @@ export function OrdenTrabajoFormDrawer({
       } finally {
         setBuscando(false);
       }
-    }, 350);
+    }, 300);
     return () => clearTimeout(timer);
   }, [abierto, busqueda, token]);
 
@@ -438,13 +444,18 @@ export function OrdenTrabajoFormDrawer({
   }
 
   function aplicarCostoProveedor(linea: LineaDraft, precios: PrecioProveedor[], proveedorId: number | null) {
-    actualizarLinea(linea.key, { proveedorId, precioCompra: costoRegistrado(precios, proveedorId) });
+    const nombre = proveedorId
+      ? proveedoresCache.current.get(proveedorId)?.nombres
+        ?? precios.find((item) => item.proveedorId === proveedorId)?.proveedorNombres
+        ?? null
+      : null;
+    actualizarLinea(linea.key, { proveedorId, proveedorNombre: nombre, precioCompra: costoRegistrado(precios, proveedorId) });
   }
 
   async function elegirProveedor(linea: LineaDraft, proveedorId: number | null) {
     const catalogoId = linea.tipo === "producto" ? linea.productoId : linea.servicioId;
     if (!catalogoId || !proveedorId) {
-      actualizarLinea(linea.key, { proveedorId, precioCompra: proveedorId ? linea.precioCompra : "" });
+      actualizarLinea(linea.key, { proveedorId, proveedorNombre: null, precioCompra: proveedorId ? linea.precioCompra : "" });
       return;
     }
     const precios = await obtenerPrecios(linea.tipo, catalogoId);
@@ -453,10 +464,10 @@ export function OrdenTrabajoFormDrawer({
 
   async function elegirProducto(linea: LineaDraft, productoId: number | null) {
     if (!productoId) {
-      actualizarLinea(linea.key, { productoId: null, descripcion: "", codigo: null, aplicaInventario: true, proveedorId: null, precioCompra: "" });
+      actualizarLinea(linea.key, { productoId: null, descripcion: "", codigo: null, aplicaInventario: true, proveedorId: null, proveedorNombre: null, precioCompra: "" });
       return;
     }
-    const producto = productos.find((item) => item.id === productoId);
+    const producto = productosCache.current.get(productoId);
     if (!producto) return;
     actualizarLinea(linea.key, {
       productoId,
@@ -470,6 +481,7 @@ export function OrdenTrabajoFormDrawer({
       aplicaInventario: producto.aplicaInventario,
       bodegaId: producto.aplicaInventario ? linea.bodegaId : null,
       proveedorId: null,
+      proveedorNombre: null,
       precioCompra: "",
     });
     if (producto.aplicaInventario && !existencias[producto.id]) {
@@ -485,10 +497,10 @@ export function OrdenTrabajoFormDrawer({
 
   async function elegirServicio(linea: LineaDraft, servicioId: number | null) {
     if (!servicioId) {
-      actualizarLinea(linea.key, { servicioId: null, descripcion: "", codigo: null, proveedorId: null, precioCompra: "" });
+      actualizarLinea(linea.key, { servicioId: null, descripcion: "", codigo: null, proveedorId: null, proveedorNombre: null, precioCompra: "" });
       return;
     }
-    const servicio = servicios.find((item) => item.id === servicioId);
+    const servicio = serviciosCache.current.get(servicioId);
     if (!servicio) return;
     actualizarLinea(linea.key, {
       servicioId,
@@ -502,6 +514,7 @@ export function OrdenTrabajoFormDrawer({
       aplicaInventario: false,
       bodegaId: null,
       proveedorId: null,
+      proveedorNombre: null,
       precioCompra: "",
     });
     const precios = await obtenerPrecios("servicio", servicio.id);
@@ -509,6 +522,52 @@ export function OrdenTrabajoFormDrawer({
     if (principal) {
       aplicarCostoProveedor({ ...linea, servicioId, tipo: "servicio" }, precios, principal.proveedorId);
     }
+  }
+
+  async function buscarProductos(texto: string): Promise<OpcionBuscador[]> {
+    const termino = texto.trim();
+    if (termino.length < MIN_BUSQUEDA) return [];
+    const hallados = await listarTodasLasPaginas((page, size) =>
+      listarProductos(token, { page, size, search: termino, activo: true }),
+    );
+    hallados.forEach((item) => productosCache.current.set(item.id, item));
+    return hallados.map((item) => ({
+      id: item.id,
+      label: `${item.codigo} · ${item.nombre}`,
+      extra: formatoPrecio(item.precioVenta),
+    }));
+  }
+
+  async function buscarServicios(texto: string): Promise<OpcionBuscador[]> {
+    const termino = texto.trim();
+    if (termino.length < MIN_BUSQUEDA) return [];
+    const hallados = await listarTodasLasPaginas((page, size) =>
+      listarServicios(token, { page, size, search: termino, activo: true }),
+    );
+    hallados.forEach((item) => serviciosCache.current.set(item.id, item));
+    return hallados.map((item) => ({
+      id: item.id,
+      label: `${item.codigo} · ${item.nombre}`,
+      extra: formatoPrecio(item.precioVenta),
+    }));
+  }
+
+  async function buscarProveedores(linea: LineaDraft, texto: string): Promise<OpcionBuscador[]> {
+    const termino = texto.trim();
+    if (termino.length < MIN_BUSQUEDA) return [];
+    const hallados = await listarTodasLasPaginas((page, size) =>
+      listarProveedores(token, { page, size, search: termino, activo: true }),
+    );
+    hallados.forEach((item) => proveedoresCache.current.set(item.id, item));
+    const precios = preciosDeLinea(linea);
+    return hallados.map((item) => {
+      const costo = precios.find((precio) => precio.proveedorId === item.id);
+      return {
+        id: item.id,
+        label: item.nombres,
+        extra: [item.identificacion, costo ? `Costo ${formatoPrecio(costo.precioCompra)}` : null].filter(Boolean).join(" · "),
+      };
+    });
   }
 
   useEffect(() => {
@@ -536,6 +595,26 @@ export function OrdenTrabajoFormDrawer({
       cancelado = true;
     };
   }, [abierto, lineas, token]);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const pendientes = lineas.filter((linea) => linea.productoId && linea.aplicaInventario && !existencias[linea.productoId]);
+    if (pendientes.length === 0) return;
+    let cancelado = false;
+    void Promise.all(
+      pendientes.map(async (linea) => {
+        const productoId = linea.productoId;
+        if (!productoId) return;
+        const stock = await listarExistencias(token, productoId);
+        if (!cancelado) {
+          setExistencias((actual) => ({ ...actual, [productoId]: stock }));
+        }
+      }),
+    );
+    return () => {
+      cancelado = true;
+    };
+  }, [abierto, existencias, lineas, token]);
 
   function agregarLinea(tipo: "producto" | "servicio") {
     const linea = lineaVacia(tipo);
@@ -583,7 +662,7 @@ export function OrdenTrabajoFormDrawer({
         aplica_iva: nuevoProducto.aplicaIva,
         aplica_inventario: nuevoProducto.aplicaInventario,
       });
-      await onCatalogoChange();
+      productosCache.current.set(producto.id, producto);
       const linea = {
         ...lineaVacia("producto"),
         productoId: producto.id,
@@ -620,7 +699,7 @@ export function OrdenTrabajoFormDrawer({
         aplica_iva: nuevoServicio.aplicaIva,
         categoria: "mantenimiento",
       });
-      await onCatalogoChange();
+      serviciosCache.current.set(servicio.id, servicio);
       const linea = {
         ...lineaVacia("servicio"),
         servicioId: servicio.id,
@@ -767,10 +846,13 @@ export function OrdenTrabajoFormDrawer({
                 <>
                   <div className="space-y-2">
                     <Label>Buscar placa, marca, modelo, cliente o cédula</Label>
-                    <Input value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="ABC-1234 o Juan Pérez" />
+                    <Input value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="Mín. 3 caracteres: ABC-1234 o Juan Pérez" />
+                    {busqueda.trim().length > 0 && busqueda.trim().length < MIN_BUSQUEDA && (
+                      <p className="text-xs text-muted-foreground">Escribe al menos {MIN_BUSQUEDA} caracteres</p>
+                    )}
                     {buscando && <p className="text-xs text-muted-foreground">Buscando...</p>}
                     {resultados.length > 1 && (
-                      <ul className="rounded-md border bg-card divide-y">
+                      <ul className="max-h-56 overflow-y-auto rounded-md border bg-card divide-y">
                         {resultados.map((item) => (
                           <li key={item.id}>
                             <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10" onClick={() => seleccionarVehiculo(item)}>
@@ -782,7 +864,7 @@ export function OrdenTrabajoFormDrawer({
                       </ul>
                     )}
                     {resultados.length === 0 && clientesHallados.length > 0 && (
-                      <ul className="rounded-md border bg-card divide-y">
+                      <ul className="max-h-56 overflow-y-auto rounded-md border bg-card divide-y">
                         {clientesHallados.map((item) => (
                           <li key={item.id}>
                             <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10" onClick={() => seleccionarCliente(item)}>
@@ -977,16 +1059,28 @@ export function OrdenTrabajoFormDrawer({
                           <p className="sm:hidden text-xs text-muted-foreground">Final {formatoPrecio(venta)} · Utilidad {formatoPrecio(utilidad)}</p>
                           {linea.tipo === "producto" ? (
                             <BuscadorSelect
-                              opciones={productos.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}`, extra: formatoPrecio(item.precioVenta) }))}
+                              opciones={[]}
                               valor={linea.productoId}
                               onChange={(id) => void elegirProducto(linea, id)}
+                              onBuscar={buscarProductos}
+                              minCaracteres={MIN_BUSQUEDA}
+                              opcionFija={linea.productoId ? {
+                                id: linea.productoId,
+                                label: linea.codigo ? `${linea.codigo} · ${linea.descripcion}` : linea.descripcion,
+                              } : null}
                               placeholder="Buscar producto"
                             />
                           ) : (
                             <BuscadorSelect
-                              opciones={servicios.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}`, extra: formatoPrecio(item.precioVenta) }))}
+                              opciones={[]}
                               valor={linea.servicioId}
                               onChange={(id) => void elegirServicio(linea, id)}
+                              onBuscar={buscarServicios}
+                              minCaracteres={MIN_BUSQUEDA}
+                              opcionFija={linea.servicioId ? {
+                                id: linea.servicioId,
+                                label: linea.codigo ? `${linea.codigo} · ${linea.descripcion}` : linea.descripcion,
+                              } : null}
                               placeholder="Buscar servicio"
                             />
                           )}
@@ -1019,16 +1113,18 @@ export function OrdenTrabajoFormDrawer({
                             <div className="space-y-1">
                               <Label>Proveedor</Label>
                               <BuscadorSelect
-                                opciones={proveedores.map((item) => {
-                                  const costo = preciosLinea.find((precio) => precio.proveedorId === item.id);
-                                  return {
-                                    id: item.id,
-                                    label: item.nombres,
-                                    extra: [item.identificacion, costo ? `Costo ${formatoPrecio(costo.precioCompra)}` : null].filter(Boolean).join(" · "),
-                                  };
-                                })}
+                                opciones={[]}
                                 valor={linea.proveedorId}
                                 onChange={(id) => void elegirProveedor(linea, id)}
+                                onBuscar={(texto) => buscarProveedores(linea, texto)}
+                                minCaracteres={MIN_BUSQUEDA}
+                                opcionFija={linea.proveedorId ? {
+                                  id: linea.proveedorId,
+                                  label: linea.proveedorNombre
+                                    ?? proveedoresCache.current.get(linea.proveedorId)?.nombres
+                                    ?? preciosLinea.find((precio) => precio.proveedorId === linea.proveedorId)?.proveedorNombres
+                                    ?? "Proveedor",
+                                } : null}
                                 placeholder="Opcional"
                               />
                             </div>

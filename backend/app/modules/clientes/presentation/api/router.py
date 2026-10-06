@@ -140,7 +140,7 @@ async def listar_vehiculos_cliente(
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarVehiculosClienteUseCase, Depends(get_listar_vehiculos_cliente_use_case)],
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=1000),
     placa: str | None = Query(None),
     marca: str | None = Query(None),
     modelo: str | None = Query(None),
@@ -164,7 +164,7 @@ async def listar_vehiculos(
     tenant: Annotated[ContextoTenant, Depends(get_tenant)],
     use_case: Annotated[ListarVehiculosUseCase, Depends(get_listar_vehiculos_use_case)],
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=100),
+    size: int = Query(10, ge=1, le=1000),
     search: str | None = Query(None),
     cliente_id: int | None = Query(None),
 ) -> VehiculoListResponse:

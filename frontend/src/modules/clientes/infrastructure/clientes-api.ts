@@ -125,14 +125,14 @@ function mapVehiculo(dto: VehiculoApiDto): Vehiculo {
 export async function listarVehiculos(
   token: string,
   params: { page?: number; size?: number; search?: string },
-): Promise<{ data: Vehiculo[]; total: number }> {
+): Promise<{ data: Vehiculo[]; total: number; pages: number }> {
   const query = new URLSearchParams({
     page: String(params.page ?? 1),
     size: String(params.size ?? 20),
   });
   if (params.search) query.set("search", params.search);
   const dto = await httpClient<ListaApi<VehiculoApiDto>>(`/vehiculos/?${query.toString()}`, { token });
-  return { data: dto.data.map(mapVehiculo), total: dto.total };
+  return { data: dto.data.map(mapVehiculo), total: dto.total, pages: dto.pages };
 }
 
 export async function altaRapidaClienteVehiculo(
