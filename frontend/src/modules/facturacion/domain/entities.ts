@@ -188,6 +188,17 @@ export function nombreCliente(factura: Pick<Factura, "tipoReceptor" | "clienteNo
   return factura.tipoReceptor === "consumidor_final" ? "Consumidor final" : factura.clienteNombres || "Cliente";
 }
 
+export function numeroAutorizacionSri(
+  factura: Pick<Factura, "numeroAutorizacion" | "claveAcceso" | "estado" | "fechaAutorizacion">,
+): string | null {
+  const numero = (factura.numeroAutorizacion || factura.claveAcceso || "").trim();
+  if (!numero) return null;
+  if (factura.numeroAutorizacion || factura.fechaAutorizacion || factura.estado === "AUTORIZADA") {
+    return numero;
+  }
+  return null;
+}
+
 export function subtotalFactura(factura: Pick<Factura, "subtotal15" | "subtotal5" | "subtotal0" | "subtotalObjeto" | "subtotalExento" | "subtotal">): number {
   if (typeof factura.subtotal === "number") return factura.subtotal;
   return factura.subtotal15 + factura.subtotal5 + factura.subtotal0 + factura.subtotalObjeto + factura.subtotalExento;
