@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { GridColDef, GridRowSelectionModel } from "@mui/x-data-grid";
 import { ArrowRightLeft, Car, Pencil, Plus, Trash2, X } from "lucide-react";
@@ -209,6 +209,7 @@ export function VehiculosDialog({
   const [confirmandoTransfer, setConfirmandoTransfer] = useState(false);
   const [transferiendo, setTransferiendo] = useState(false);
   const form = useForm<FormVehiculo>({ defaultValues: vacio });
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(filtros), 350);
@@ -273,6 +274,7 @@ export function VehiculosDialog({
 
   function abrirEdicion(vehiculo: Vehiculo) {
     setEditando(vehiculo);
+    setPanelTransfer(false);
     form.reset({
       placa: vehiculo.placa,
       marca: vehiculo.marca ?? "",
@@ -287,6 +289,18 @@ export function VehiculosDialog({
     });
     setMostrarForm(true);
   }
+
+  useEffect(() => {
+    if (!mostrarForm) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const placa = formRef.current?.querySelector<HTMLInputElement>('input[name="placa"]');
+      placa?.focus({ preventScroll: true });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [mostrarForm, editando]);
 
   async function guardar(values: FormVehiculo) {
     if (!clienteId) {
@@ -433,6 +447,7 @@ export function VehiculosDialog({
                 className="w-full sm:w-auto"
                 disabled={idsSeleccionados.length === 0}
                 onClick={() => {
+                  setMostrarForm(false);
                   setPanelTransfer(true);
                   setModoTransfer(idsSeleccionados.length > 1 ? "unico" : "unico");
                 }}
@@ -444,6 +459,7 @@ export function VehiculosDialog({
                 className="w-full sm:w-auto"
                 onClick={() => {
                   setEditando(null);
+                  setPanelTransfer(false);
                   form.reset(vacio);
                   setMostrarForm(true);
                 }}
@@ -455,6 +471,81 @@ export function VehiculosDialog({
 
             {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
             {exito && <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">{exito}</div>}
+
+            {mostrarForm && (
+              <form
+                ref={formRef}
+                className="scroll-mt-3 rounded-xl border p-4 space-y-4 bg-background"
+                onSubmit={form.handleSubmit(guardar)}
+              >
+                <p className="font-medium">{editando ? "Editar vehículo" : "Nuevo vehículo"}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>Placa *</Label>
+                    <Input {...form.register("placa")} className="uppercase" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Marca</Label>
+                    <Input {...form.register("marca")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Modelo</Label>
+                    <Input {...form.register("modelo")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Año</Label>
+                    <Input type="number" {...form.register("anio")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Tipo</Label>
+                    <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm" {...form.register("tipo")}>
+                      <option value="">Sin especificar</option>
+                      {TIPOS_VEHICULO.map((item) => (
+                        <option key={item.value} value={item.value}>{item.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Color</Label>
+                    <Input {...form.register("color")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Combustible</Label>
+                    <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm" {...form.register("combustible")}>
+                      <option value="">Sin especificar</option>
+                      {TIPOS_COMBUSTIBLE.map((item) => (
+                        <option key={item.value} value={item.value}>{item.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Transmisión</Label>
+                    <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm" {...form.register("transmision")}>
+                      <option value="">Sin especificar</option>
+                      {TIPOS_TRANSMISION.map((item) => (
+                        <option key={item.value} value={item.value}>{item.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Cilindrada</Label>
+                    <Input type="number" step="0.01" {...form.register("cilindrada")} />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label>Notas</Label>
+                    <Input {...form.register("notas")} />
+                  </div>
+                </div>
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                  <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setMostrarForm(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" className="w-full sm:w-auto" disabled={guardando}>
+                    {guardando ? "Guardando..." : "Guardar"}
+                  </Button>
+                </div>
+              </form>
+            )}
 
             <MuiDataTable
               rows={vehiculos}
@@ -544,76 +635,6 @@ export function VehiculosDialog({
               </div>
             )}
 
-            {mostrarForm && (
-              <form className="rounded-xl border p-4 space-y-4 bg-background" onSubmit={form.handleSubmit(guardar)}>
-                <p className="font-medium">{editando ? "Editar vehículo" : "Nuevo vehículo"}</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>Placa *</Label>
-                    <Input {...form.register("placa")} className="uppercase" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Marca</Label>
-                    <Input {...form.register("marca")} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Modelo</Label>
-                    <Input {...form.register("modelo")} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Año</Label>
-                    <Input type="number" {...form.register("anio")} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Tipo</Label>
-                    <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm" {...form.register("tipo")}>
-                      <option value="">Sin especificar</option>
-                      {TIPOS_VEHICULO.map((item) => (
-                        <option key={item.value} value={item.value}>{item.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Color</Label>
-                    <Input {...form.register("color")} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Combustible</Label>
-                    <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm" {...form.register("combustible")}>
-                      <option value="">Sin especificar</option>
-                      {TIPOS_COMBUSTIBLE.map((item) => (
-                        <option key={item.value} value={item.value}>{item.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Transmisión</Label>
-                    <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm" {...form.register("transmision")}>
-                      <option value="">Sin especificar</option>
-                      {TIPOS_TRANSMISION.map((item) => (
-                        <option key={item.value} value={item.value}>{item.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Cilindrada</Label>
-                    <Input type="number" step="0.01" {...form.register("cilindrada")} />
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label>Notas</Label>
-                    <Input {...form.register("notas")} />
-                  </div>
-                </div>
-                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                  <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setMostrarForm(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" className="w-full sm:w-auto" disabled={guardando}>
-                    {guardando ? "Guardando..." : "Guardar"}
-                  </Button>
-                </div>
-              </form>
-            )}
           </div>
         </div>
 
