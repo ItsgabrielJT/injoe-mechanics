@@ -313,7 +313,7 @@ export function OrdenesTrabajoPage() {
       setEdicion(null);
       await cargar();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo guardar la orden");
+      throw err instanceof ApiError ? err : new Error("No se pudo guardar la orden");
     } finally {
       setGuardando(false);
     }

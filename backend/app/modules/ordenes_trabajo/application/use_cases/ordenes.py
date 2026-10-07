@@ -131,8 +131,6 @@ class GuardarOrdenUseCase:
                     raise ProductoNoEncontrado()
                 descripcion = descripcion or producto.nombre
                 codigo = codigo or producto.codigo
-                if producto.aplica_inventario and not bodega_id:
-                    raise BodegaRequerida()
                 if not producto.aplica_inventario:
                     bodega_id = None
                 if command.proveedor_id and Decimal(command.precio_compra) > 0:

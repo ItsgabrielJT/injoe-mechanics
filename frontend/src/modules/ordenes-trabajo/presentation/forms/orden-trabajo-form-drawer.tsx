@@ -71,7 +71,12 @@ function nuevaKey() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function lineaVacia(tipo: "producto" | "servicio"): LineaDraft {
+function primeraBodegaId(bodegas: Bodega[]): number | null {
+  const primera = [...bodegas].sort((a, b) => a.id - b.id)[0];
+  return primera?.id ?? null;
+}
+
+function lineaVacia(tipo: "producto" | "servicio", bodegaId: number | null = null): LineaDraft {
   return {
     key: nuevaKey(),
     tipo,
@@ -79,7 +84,7 @@ function lineaVacia(tipo: "producto" | "servicio"): LineaDraft {
     servicioId: null,
     proveedorId: null,
     proveedorNombre: null,
-    bodegaId: null,
+    bodegaId: tipo === "producto" ? bodegaId : null,
     descripcion: "",
     codigo: null,
     cantidad: "1",
@@ -90,6 +95,13 @@ function lineaVacia(tipo: "producto" | "servicio"): LineaDraft {
     tipoImpuesto: "15",
     aplicaInventario: tipo === "producto",
   };
+}
+
+function totalesLinea(linea: LineaDraft) {
+  const ventaUnit = precioVentaFinal(numero(linea.precioBase), linea.incluyeIva, linea.tipoImpuesto, linea.aplicaIva);
+  const venta = ventaUnit * numero(linea.cantidad);
+  const costo = numero(linea.precioCompra) * numero(linea.cantidad);
+  return { ventaUnit, venta, costo, utilidad: venta - costo };
 }
 
 function isoALocal(iso?: string | null): string {
@@ -200,6 +212,8 @@ export function OrdenTrabajoFormDrawer({
   const [nuevoServicio, setNuevoServicio] = useState({ nombre: "", precio: "", aplicaIva: true, tipo: "15" as TipoImpuesto });
   const [creando, setCreando] = useState(false);
   const [lineaActiva, setLineaActiva] = useState<string | null>(null);
+  const [resetBuscador, setResetBuscador] = useState(0);
+  const ultimoTextoBusqueda = useRef("");
   const [preciosPorClave, setPreciosPorClave] = useState<Record<string, PrecioProveedor[]>>({});
   const preciosRef = useRef<Record<string, PrecioProveedor[]>>({});
   const productosCache = useRef<Map<number, Producto>>(new Map());
@@ -295,7 +309,7 @@ export function OrdenTrabajoFormDrawer({
         precioCompra: textoNumero(item.precioCompra),
         aplicaIva: item.aplicaIva,
         tipoImpuesto: item.tipoImpuesto,
-        aplicaInventario: item.productoId ? Boolean(item.bodegaId) : false,
+        aplicaInventario: Boolean(item.productoId),
       }));
       setLineas(cargadas);
       setLineaActiva(cargadas[0]?.key ?? null);
@@ -479,7 +493,7 @@ export function OrdenTrabajoFormDrawer({
       aplicaIva: producto.aplicaIva,
       tipoImpuesto: producto.tipoImpuesto,
       aplicaInventario: producto.aplicaInventario,
-      bodegaId: producto.aplicaInventario ? linea.bodegaId : null,
+      bodegaId: producto.aplicaInventario ? linea.bodegaId ?? primeraBodegaId(bodegas) : null,
       proveedorId: null,
       proveedorNombre: null,
       precioCompra: "",
@@ -617,12 +631,32 @@ export function OrdenTrabajoFormDrawer({
   }, [abierto, existencias, lineas, token]);
 
   function agregarLinea(tipo: "producto" | "servicio") {
-    const linea = lineaVacia(tipo);
-    setLineas((actual) => [...actual, linea]);
+    const linea = lineaVacia(tipo, tipo === "producto" ? primeraBodegaId(bodegas) : null);
+    setLineas((actual) => [linea, ...actual]);
     setLineaActiva(linea.key);
-    requestAnimationFrame(() => {
-      document.getElementById(`linea-ot-${linea.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+  }
+
+  function recordarTextoBusqueda(texto: string) {
+    const limpio = texto.trim();
+    if (limpio) ultimoTextoBusqueda.current = limpio;
+  }
+
+  function abrirAltaProducto() {
+    const nombre = ultimoTextoBusqueda.current;
+    setAltaServicio(false);
+    setAltaProducto(true);
+    if (nombre) setNuevoProducto((actual) => ({ ...actual, nombre }));
+    setResetBuscador((actual) => actual + 1);
+    ultimoTextoBusqueda.current = "";
+  }
+
+  function abrirAltaServicio() {
+    const nombre = ultimoTextoBusqueda.current;
+    setAltaProducto(false);
+    setAltaServicio(true);
+    if (nombre) setNuevoServicio((actual) => ({ ...actual, nombre }));
+    setResetBuscador((actual) => actual + 1);
+    ultimoTextoBusqueda.current = "";
   }
 
   function cerrarAltaProducto() {
@@ -664,7 +698,7 @@ export function OrdenTrabajoFormDrawer({
       });
       productosCache.current.set(producto.id, producto);
       const linea = {
-        ...lineaVacia("producto"),
+        ...lineaVacia("producto", producto.aplicaInventario ? primeraBodegaId(bodegas) : null),
         productoId: producto.id,
         descripcion: producto.nombre,
         codigo: producto.codigo,
@@ -672,8 +706,9 @@ export function OrdenTrabajoFormDrawer({
         aplicaIva: producto.aplicaIva,
         tipoImpuesto: producto.tipoImpuesto,
         aplicaInventario: producto.aplicaInventario,
+        bodegaId: producto.aplicaInventario ? primeraBodegaId(bodegas) : null,
       };
-      setLineas((actuales) => [...actuales, linea]);
+      setLineas((actuales) => [linea, ...actuales]);
       setLineaActiva(linea.key);
       cerrarAltaProducto();
     } catch (err) {
@@ -710,7 +745,7 @@ export function OrdenTrabajoFormDrawer({
         tipoImpuesto: servicio.tipoImpuesto,
         aplicaInventario: false,
       };
-      setLineas((actuales) => [...actuales, linea]);
+      setLineas((actuales) => [linea, ...actuales]);
       setLineaActiva(linea.key);
       cerrarAltaServicio();
     } catch (err) {
@@ -738,12 +773,10 @@ export function OrdenTrabajoFormDrawer({
   const resumen = useMemo(() => {
     return lineas.reduce(
       (acc, linea) => {
-        const venta = precioVentaFinal(numero(linea.precioBase), linea.incluyeIva, linea.tipoImpuesto, linea.aplicaIva);
-        const total = venta * numero(linea.cantidad);
-        const costo = numero(linea.precioCompra) * numero(linea.cantidad);
-        acc.venta += total;
-        acc.costo += costo;
-        acc.utilidad += total - costo;
+        const totales = totalesLinea(linea);
+        acc.venta += totales.venta;
+        acc.costo += totales.costo;
+        acc.utilidad += totales.utilidad;
         return acc;
       },
       { venta: 0, costo: 0, utilidad: 0 },
@@ -769,10 +802,6 @@ export function OrdenTrabajoFormDrawer({
         setError("Cada línea debe tener un producto o servicio");
         return;
       }
-      if (linea.tipo === "producto" && linea.aplicaInventario && !linea.bodegaId) {
-        setError(`El producto ${linea.descripcion} requiere bodega`);
-        return;
-      }
       if (numero(linea.cantidad) <= 0) {
         setError("La cantidad debe ser mayor a 0");
         return;
@@ -791,17 +820,21 @@ export function OrdenTrabajoFormDrawer({
       aplica_iva: linea.aplicaIva,
       tipo_impuesto: linea.tipoImpuesto,
     }));
-    await onSubmit({
-      cliente_id: clienteId,
-      vehiculo_id: vehiculoId,
-      tecnico_id: tecnicoId,
-      fecha_inicio: localAIso(fechaInicio),
-      fecha_entrega: localAIso(fechaEntrega),
-      kilometraje: kilometraje === "" ? null : Number(kilometraje),
-      notas_generales: notasGenerales.trim() || null,
-      notas_tecnicas: notasTecnicas.trim() || null,
-      items,
-    });
+    try {
+      await onSubmit({
+        cliente_id: clienteId,
+        vehiculo_id: vehiculoId,
+        tecnico_id: tecnicoId,
+        fecha_inicio: localAIso(fechaInicio),
+        fecha_entrega: localAIso(fechaEntrega),
+        kilometraje: kilometraje === "" ? null : Number(kilometraje),
+        notas_generales: notasGenerales.trim() || null,
+        notas_tecnicas: notasTecnicas.trim() || null,
+        items,
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar la orden");
+    }
   }
 
   if (!abierto) return null;
@@ -819,13 +852,17 @@ export function OrdenTrabajoFormDrawer({
             <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose}><X className="h-5 w-5" /></Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
-            {error && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 mt-0.5" /> {error}
-              </div>
-            )}
+          {error && (
+            <div className="shrink-0 mx-4 sm:mx-6 mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span className="flex-1">{error}</span>
+              <button type="button" className="shrink-0" onClick={() => setError(null)} aria-label="Cerrar error">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
             <section className="space-y-4">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">Cliente y vehículo</h3>
               {vehiculoSel && clienteSel ? (
@@ -949,8 +986,8 @@ export function OrdenTrabajoFormDrawer({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="ghost" size="sm" onClick={() => { setAltaServicio(false); setAltaProducto((v) => !v); }}>El repuesto no existe</Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => { setAltaProducto(false); setAltaServicio((v) => !v); }}>El servicio no existe</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={abrirAltaProducto}>El repuesto no existe</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={abrirAltaServicio}>El servicio no existe</Button>
               </div>
 
               {altaProducto && (
@@ -1022,8 +1059,7 @@ export function OrdenTrabajoFormDrawer({
 
               <div className="space-y-2">
                 {lineas.map((linea, indice) => {
-                  const venta = precioVentaFinal(numero(linea.precioBase), linea.incluyeIva, linea.tipoImpuesto, linea.aplicaIva);
-                  const utilidad = venta * numero(linea.cantidad) - numero(linea.precioCompra) * numero(linea.cantidad);
+                  const totales = totalesLinea(linea);
                   const stock = linea.productoId ? existencias[linea.productoId] ?? [] : [];
                   const abierta = lineaActiva === linea.key;
                   const Icono = linea.tipo === "producto" ? Package : Wrench;
@@ -1040,7 +1076,7 @@ export function OrdenTrabajoFormDrawer({
                           <Icono className="h-4 w-4 shrink-0 text-primary" />
                           <span className="text-xs text-muted-foreground shrink-0">{indice + 1}.</span>
                           <span className="truncate text-sm font-medium">{linea.descripcion || (linea.tipo === "producto" ? "Producto" : "Servicio")}</span>
-                          <span className="hidden sm:inline truncate text-xs text-muted-foreground">{formatoPrecio(venta * numero(linea.cantidad))} · {formatoPrecio(utilidad)}</span>
+                          <span className="hidden sm:inline truncate text-xs text-muted-foreground">{formatoPrecio(totales.venta)} · {formatoPrecio(totales.utilidad)}</span>
                           <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform ml-auto", abierta && "rotate-180")} />
                         </button>
                         <Button
@@ -1058,13 +1094,15 @@ export function OrdenTrabajoFormDrawer({
                       </div>
                       {abierta && (
                         <div className="border-t p-3 sm:p-4 space-y-3">
-                          <p className="sm:hidden text-xs text-muted-foreground">Final {formatoPrecio(venta)} · Utilidad {formatoPrecio(utilidad)}</p>
+                          <p className="sm:hidden text-xs text-muted-foreground">Final {formatoPrecio(totales.ventaUnit)} · Utilidad {formatoPrecio(totales.utilidad)}</p>
                           {linea.tipo === "producto" ? (
                             <BuscadorSelect
                               opciones={[]}
                               valor={linea.productoId}
                               onChange={(id) => void elegirProducto(linea, id)}
                               onBuscar={buscarProductos}
+                              onTextoChange={recordarTextoBusqueda}
+                              resetKey={resetBuscador}
                               minCaracteres={MIN_BUSQUEDA}
                               opcionFija={linea.productoId ? {
                                 id: linea.productoId,
@@ -1078,6 +1116,8 @@ export function OrdenTrabajoFormDrawer({
                               valor={linea.servicioId}
                               onChange={(id) => void elegirServicio(linea, id)}
                               onBuscar={buscarServicios}
+                              onTextoChange={recordarTextoBusqueda}
+                              resetKey={resetBuscador}
                               minCaracteres={MIN_BUSQUEDA}
                               opcionFija={linea.servicioId ? {
                                 id: linea.servicioId,
@@ -1109,7 +1149,7 @@ export function OrdenTrabajoFormDrawer({
                             <select className="h-9 rounded-md border border-input px-2 text-sm bg-background" value={linea.tipoImpuesto} onChange={(event) => actualizarLinea(linea.key, { tipoImpuesto: event.target.value as TipoImpuesto })}>
                               {TIPOS_IMPUESTO.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                             </select>
-                            <span className="text-muted-foreground">Final {formatoPrecio(venta)} · Utilidad {formatoPrecio(utilidad)}</span>
+                            <span className="text-muted-foreground">Final {formatoPrecio(totales.ventaUnit)} · Utilidad {formatoPrecio(totales.utilidad)}</span>
                           </div>
                           <div className={cn("grid gap-3", linea.aplicaInventario ? "sm:grid-cols-2" : "")}>
                             <div className="space-y-1">
@@ -1132,7 +1172,7 @@ export function OrdenTrabajoFormDrawer({
                             </div>
                             {linea.aplicaInventario && (
                               <div className="space-y-1">
-                                <Label>Bodega *</Label>
+                                <Label>Bodega</Label>
                                 <select className="flex h-10 w-full rounded-md border border-input px-3 text-sm bg-background" value={linea.bodegaId ?? ""} onChange={(event) => actualizarLinea(linea.key, { bodegaId: event.target.value ? Number(event.target.value) : null })}>
                                   <option value="">Selecciona</option>
                                   {bodegas.map((item) => {
@@ -1153,12 +1193,12 @@ export function OrdenTrabajoFormDrawer({
           </div>
 
           <div className="shrink-0 border-t bg-card px-4 sm:px-6 py-3 space-y-3">
-            <div className="flex flex-wrap justify-between sm:justify-end gap-x-6 gap-y-1 text-sm">
+            <div className="flex flex-wrap justify-start gap-x-6 gap-y-1 text-sm">
               <div><span className="text-muted-foreground">Venta </span><span className="font-semibold">{formatoPrecio(resumen.venta)}</span></div>
               <div><span className="text-muted-foreground">Costo </span><span className="font-semibold">{formatoPrecio(resumen.costo)}</span></div>
               <div><span className="text-muted-foreground">Utilidad </span><span className="font-semibold">{formatoPrecio(resumen.utilidad)}</span></div>
             </div>
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-start gap-2">
               <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose}>Cancelar</Button>
               <Button type="button" className="w-full sm:w-auto" disabled={cargando} onClick={() => void enviar()}>{cargando ? "Guardando..." : "Guardar orden"}</Button>
             </div>
