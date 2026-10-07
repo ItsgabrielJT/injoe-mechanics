@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from app.modules.facturacion.application.dto import (
@@ -17,7 +17,9 @@ from app.modules.facturacion.domain.entities import (
     Factura,
     FacturaItem,
     TipoReceptor,
+    alinear_fecha_emision_sri,
     dinero,
+    hoy_sri,
     precio_base,
 )
 from app.modules.facturacion.domain.exceptions import (
@@ -268,7 +270,7 @@ class GuardarFacturaUseCase:
                 numero=numero,
                 tipo_receptor=command.tipo_receptor,
                 estado=EstadoFactura.BORRADOR,
-                fecha_emision=command.fecha_emision or date.today(),
+                fecha_emision=command.fecha_emision or hoy_sri(),
             )
 
         factura.tipo_receptor = command.tipo_receptor
@@ -346,7 +348,7 @@ class CrearDesdeOrdenUseCase:
             numero=numero,
             tipo_receptor=command.tipo_receptor,
             estado=EstadoFactura.BORRADOR,
-            fecha_emision=date.today(),
+            fecha_emision=hoy_sri(),
             cliente_id=cliente_id,
             orden_trabajo_id=orden.id,
             forma_pago_id=command.forma_pago_id,
@@ -404,6 +406,8 @@ class EnviarSriUseCase:
             if recuperada.estado == EstadoFactura.AUTORIZADA:
                 return recuperada
             factura = recuperada
+        if factura.estado in {EstadoFactura.BORRADOR, EstadoFactura.RECHAZADA}:
+            alinear_fecha_emision_sri(factura)
         factura.estado = EstadoFactura.ENVIADA
         await self.repository.guardar(factura)
         respuesta = await firmar_factura(factura, empresa, punto)
@@ -593,6 +597,7 @@ class ReintentarSriUseCase:
                     self.repository, factura, empresa, punto, clave, xml, tenant, self.producto_repository, self.movimiento_repository
                 )
         if factura.estado == EstadoFactura.RECHAZADA:
+            alinear_fecha_emision_sri(factura)
             respuesta = await firmar_factura(factura, empresa, punto)
             return await _aplicar_respuesta_sri(
                 self.repository, factura, empresa, punto, respuesta, tenant, self.producto_repository, self.movimiento_repository

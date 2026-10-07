@@ -337,7 +337,11 @@ export function FacturaFormDrawer({
                   {formasPago.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
                 </select>
               </div>
-              <div><Label>Fecha de emisión</Label><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></div>
+              <div>
+                <Label>Fecha de emisión</Label>
+                <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+                <p className="mt-1 text-xs text-muted-foreground">Al enviar al SRI se usará la fecha de hoy, aunque el borrador sea de otro día.</p>
+              </div>
               <div><Label>Fecha de pago</Label><Input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} /></div>
             </div>
 

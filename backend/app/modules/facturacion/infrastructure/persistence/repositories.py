@@ -405,6 +405,8 @@ class SqlAlchemyFacturaRepository:
         modelo.reason_error = factura.reason_error
         modelo.numero_autorizacion = factura.numero_autorizacion
         modelo.fecha_emision = factura.fecha_emision
+        if factura.creado_en:
+            modelo.creado_en = factura.creado_en
         modelo.fecha_vencimiento = factura.fecha_vencimiento
         modelo.fecha_pago = factura.fecha_pago
         modelo.fecha_autorizacion = factura.fecha_autorizacion

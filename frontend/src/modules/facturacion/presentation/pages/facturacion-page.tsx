@@ -254,15 +254,16 @@ export function FacturacionPage() {
     setRows((prev) => prev.map((factura) => (factura.id === row.id ? { ...factura, estado: "ENVIADA" } : factura)));
     try {
       const actualizada = await enviarSri(token, row.id);
+      const fechaHoy = actualizada.fechaEmision ? ` Fecha de emisión: ${actualizada.fechaEmision}.` : "";
       if (actualizada.estado === "AUTORIZADA") {
-        setExito(`Factura ${row.numero} enviada. El SRI ya la autorizó.`);
+        setExito(`Factura ${row.numero} enviada. El SRI ya la autorizó.${fechaHoy}`);
       } else if (actualizada.estado === "PENDIENTE_AUTORIZACION" || actualizada.estado === "ENVIADA") {
-        setExito(`Factura ${row.numero} enviada. El SRI la recibió y el sistema actualizará el estado al autorizarla.`);
+        setExito(`Factura ${row.numero} enviada. El SRI la recibió y el sistema actualizará el estado al autorizarla.${fechaHoy}`);
       } else if (actualizada.estado === "RECHAZADA") {
         setError(mensajeErrorSri(actualizada.reasonError) || "El SRI rechazó la factura.");
         setExito(null);
       } else {
-        setExito(`Factura ${row.numero} enviada. Estado: ${etiquetaEstado(actualizada.estado)}.`);
+        setExito(`Factura ${row.numero} enviada. Estado: ${etiquetaEstado(actualizada.estado)}.${fechaHoy}`);
       }
       await cargar({ silencioso: true });
     } catch (err) {

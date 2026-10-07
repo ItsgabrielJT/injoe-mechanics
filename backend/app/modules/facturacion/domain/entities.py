@@ -2,8 +2,24 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 from app.modules.inventario.domain.entities import TipoImpuesto
+
+ZONA_SRI = ZoneInfo("America/Guayaquil")
+
+
+def hoy_sri() -> date:
+    return datetime.now(ZONA_SRI).date()
+
+
+def ahora_sri() -> datetime:
+    return datetime.now(ZONA_SRI)
+
+
+def alinear_fecha_emision_sri(factura: "Factura") -> None:
+    factura.fecha_emision = hoy_sri()
+    factura.creado_en = ahora_sri()
 
 
 class EstadoFactura(str, Enum):
