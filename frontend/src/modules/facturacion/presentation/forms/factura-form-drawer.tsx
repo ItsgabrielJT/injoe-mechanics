@@ -14,7 +14,10 @@ import { Portal } from "@/shared/components/portal";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { listarTodasLasPaginas } from "@/shared/lib/listar-todas-las-paginas";
 import { cn } from "@/shared/lib/utils";
+
+const MIN_BUSQUEDA = 3;
 
 interface LineaForm {
   key: string;
@@ -144,13 +147,12 @@ export function FacturaFormDrawer({
   }, [abierto, factura, formasPago]);
 
   const buscarClientes = useCallback(async (texto: string): Promise<OpcionBuscador[]> => {
-    if (!token) return [];
-    const respuesta = await listarClientes(token, {
-      page: 1,
-      size: 20,
-      search: texto.trim() || undefined,
-    });
-    return respuesta.data.map((cliente) => ({
+    const termino = texto.trim();
+    if (!token || termino.length < MIN_BUSQUEDA) return [];
+    const clientes = await listarTodasLasPaginas((page, size) =>
+      listarClientes(token, { page, size, search: termino }),
+    );
+    return clientes.map((cliente) => ({
       id: cliente.id,
       label: cliente.nombres,
       extra: cliente.identificacion ?? "",
@@ -160,7 +162,7 @@ export function FacturaFormDrawer({
   useEffect(() => {
     if (!abierto) return;
     const termino = busqueda.trim();
-    if (termino.length < 2) {
+    if (termino.length < MIN_BUSQUEDA) {
       setProductosHallados([]);
       setServiciosHallados([]);
       setBuscandoItems(false);
@@ -170,11 +172,15 @@ export function FacturaFormDrawer({
       setBuscandoItems(true);
       try {
         const [prods, servs] = await Promise.all([
-          listarProductos(token, { page: 1, size: 20, search: termino, activo: true }),
-          listarServicios(token, { page: 1, size: 20, search: termino, activo: true }),
+          listarTodasLasPaginas((page, size) =>
+            listarProductos(token, { page, size, search: termino, activo: true }),
+          ),
+          listarTodasLasPaginas((page, size) =>
+            listarServicios(token, { page, size, search: termino, activo: true }),
+          ),
         ]);
-        setProductosHallados(prods.data);
-        setServiciosHallados(servs.data);
+        setProductosHallados(prods);
+        setServiciosHallados(servs);
       } catch {
         setProductosHallados([]);
         setServiciosHallados([]);
@@ -315,12 +321,13 @@ export function FacturaFormDrawer({
                     valor={clienteId}
                     onChange={setClienteId}
                     onBuscar={buscarClientes}
+                    minCaracteres={MIN_BUSQUEDA}
                     opcionFija={factura?.clienteId ? {
                       id: factura.clienteId,
                       label: factura.clienteNombres || "Cliente",
                       extra: factura.clienteIdentificacion ?? "",
                     } : null}
-                    placeholder="Buscar cliente"
+                    placeholder="Buscar cliente (mín. 3)"
                   />
                 </div>
               )}
@@ -336,9 +343,12 @@ export function FacturaFormDrawer({
 
             <div>
               <Label>Agregar producto o servicio</Label>
-              <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Busca por código o nombre" />
+              <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Busca por código o nombre (mín. 3)" />
+              {busqueda.trim().length > 0 && busqueda.trim().length < MIN_BUSQUEDA && (
+                <p className="mt-1 text-xs text-muted-foreground">Escribe al menos {MIN_BUSQUEDA} caracteres</p>
+              )}
               {buscandoItems && <p className="mt-1 text-xs text-muted-foreground">Buscando productos y servicios...</p>}
-              {busqueda.trim().length >= 2 && !buscandoItems && itemsFiltrados.length === 0 && (
+              {busqueda.trim().length >= MIN_BUSQUEDA && !buscandoItems && itemsFiltrados.length === 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">Sin productos ni servicios para esa búsqueda.</p>
               )}
               {itemsFiltrados.length > 0 && (

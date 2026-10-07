@@ -20,7 +20,10 @@ import { Portal } from "@/shared/components/portal";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { listarTodasLasPaginas } from "@/shared/lib/listar-todas-las-paginas";
 import { ApiError } from "@/shared/infrastructure/http/http-error";
+
+const MIN_BUSQUEDA = 3;
 
 interface VehiculosDialogProps {
   abierto: boolean;
@@ -77,7 +80,7 @@ function SelectorCliente({
   excluirId,
   value,
   onChange,
-  placeholder = "Buscar cliente por nombre o cédula",
+  placeholder = "Buscar cliente por nombre o cédula (mín. 3)",
 }: {
   token: string;
   excluirId?: number | null;
@@ -88,6 +91,7 @@ function SelectorCliente({
   const [texto, setTexto] = useState(value ? `${value.nombres} · ${value.identificacion ?? ""}` : "");
   const [opciones, setOpciones] = useState<Cliente[]>([]);
   const [abierto, setAbierto] = useState(false);
+  const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
     if (value) {
@@ -96,16 +100,40 @@ function SelectorCliente({
   }, [value]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!abierto) {
-        return;
+    if (!abierto || value) {
+      setOpciones([]);
+      setCargando(false);
+      return;
+    }
+    const termino = texto.trim();
+    if (termino.length < MIN_BUSQUEDA) {
+      setOpciones([]);
+      setCargando(false);
+      return;
+    }
+    let cancelado = false;
+    const timer = setTimeout(async () => {
+      setCargando(true);
+      try {
+        const hallados = await listarTodasLasPaginas((page, size) =>
+          listarClientes(token, { page, size, search: termino }),
+        );
+        if (!cancelado) {
+          setOpciones(hallados.filter((cliente) => cliente.id !== excluirId));
+        }
+      } catch {
+        if (!cancelado) setOpciones([]);
+      } finally {
+        if (!cancelado) setCargando(false);
       }
-      void listarClientes(token, { page: 1, size: 8, search: texto.trim() || undefined }).then((respuesta) => {
-        setOpciones(respuesta.data.filter((cliente) => cliente.id !== excluirId));
-      });
     }, 250);
-    return () => clearTimeout(timer);
-  }, [abierto, excluirId, texto, token]);
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [abierto, excluirId, texto, token, value]);
+
+  const pendienteMinimo = !value && texto.trim().length < MIN_BUSQUEDA;
 
   return (
     <div className="relative">
@@ -119,9 +147,13 @@ function SelectorCliente({
           setAbierto(true);
         }}
       />
-      {abierto && (
+      {abierto && !value && (
         <div className="absolute z-20 mt-1 w-full rounded-xl border bg-card shadow-elegant max-h-56 overflow-y-auto">
-          {opciones.length === 0 ? (
+          {pendienteMinimo ? (
+            <p className="px-3 py-2 text-sm text-muted-foreground">Escribe al menos {MIN_BUSQUEDA} caracteres</p>
+          ) : cargando ? (
+            <p className="px-3 py-2 text-sm text-muted-foreground">Buscando...</p>
+          ) : opciones.length === 0 ? (
             <p className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</p>
           ) : (
             opciones.map((cliente) => (

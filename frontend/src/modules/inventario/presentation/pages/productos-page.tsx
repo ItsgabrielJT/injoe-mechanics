@@ -40,7 +40,7 @@ import {
   reporteProductos,
   type ProductoInput,
 } from "@/modules/inventario/infrastructure/inventario-api";
-import { BuscadorMultiple } from "@/modules/inventario/presentation/components/buscador-select";
+import { BuscadorMultiple, type OpcionBuscador } from "@/modules/inventario/presentation/components/buscador-select";
 import { BodegaFormDrawer, type BodegaFormValues } from "@/modules/inventario/presentation/forms/bodega-form-drawer";
 import { CategoriaFormDrawer, type CategoriaFormValues } from "@/modules/inventario/presentation/forms/categoria-form-drawer";
 import { ProductoFormDrawer, type ProductoFormValues } from "@/modules/inventario/presentation/forms/producto-form-drawer";
@@ -51,9 +51,11 @@ import { Portal } from "@/shared/components/portal";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { ApiError } from "@/shared/infrastructure/http/http-error";
+import { listarTodasLasPaginas } from "@/shared/lib/listar-todas-las-paginas";
 import { cn } from "@/shared/lib/utils";
 
 type Tab = "productos" | "alertas" | "categorias" | "bodegas" | "proveedores";
+const MIN_BUSQUEDA = 3;
 
 export function ProductosPage() {
   const { sesion, puntoActivo } = useSesionContext();
@@ -165,12 +167,40 @@ export function ProductosPage() {
     }
   }, [cargarAlertas, tab, puntoActivo?.id]);
 
-  useEffect(() => {
-    if (tab !== "proveedores" || !token) return;
-    void listarProductos(token, { page: 1, size: 200, activo: true })
-      .then((respuesta) => setCatalogoCostos(respuesta.data))
-      .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudieron cargar los productos"));
-  }, [tab, token, puntoActivo?.id]);
+  const acumularProductos = useCallback((hallados: Producto[], setter: typeof setCatalogoCostos) => {
+    setter((prev) => {
+      const mapa = new Map(prev.map((item) => [item.id, item]));
+      hallados.forEach((item) => mapa.set(item.id, item));
+      return [...mapa.values()];
+    });
+  }, []);
+
+  const buscarProductosCostos = useCallback(async (texto: string): Promise<OpcionBuscador[]> => {
+    const termino = texto.trim();
+    if (!token || termino.length < MIN_BUSQUEDA) return [];
+    const hallados = await listarTodasLasPaginas((page, size) =>
+      listarProductos(token, { page, size, search: termino, activo: true }),
+    );
+    acumularProductos(hallados, setCatalogoCostos);
+    return hallados.map((item) => ({
+      id: item.id,
+      label: `${item.codigo} · ${item.nombre}`,
+      extra: formatoPrecio(item.precioVenta),
+    }));
+  }, [acumularProductos, token]);
+
+  const buscarProductosReporte = useCallback(async (texto: string): Promise<OpcionBuscador[]> => {
+    const termino = texto.trim();
+    if (!token || termino.length < MIN_BUSQUEDA) return [];
+    const hallados = await listarTodasLasPaginas((page, size) =>
+      listarProductos(token, { page, size, search: termino }),
+    );
+    acumularProductos(hallados, setCatalogoProductos);
+    return hallados.map((item) => ({
+      id: item.id,
+      label: `${item.codigo} · ${item.nombre}`,
+    }));
+  }, [acumularProductos, token]);
 
   useEffect(() => {
     setPage(0);
@@ -257,8 +287,6 @@ export function ProductosPage() {
 
   async function abrirReporte() {
     setReporteAbierto(true);
-    const lista = await listarProductos(token, { page: 1, size: 200 });
-    setCatalogoProductos(lista.data);
   }
 
   const columnsProductos = useMemo<GridColDef[]>(
@@ -468,7 +496,9 @@ export function ProductosPage() {
               opciones={catalogoCostos.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}`, extra: formatoPrecio(item.precioVenta) }))}
               valores={idsCostos}
               onChange={setIdsCostos}
-              placeholder="Buscar y agregar productos para ver sus costos"
+              onBuscar={buscarProductosCostos}
+              minCaracteres={MIN_BUSQUEDA}
+              placeholder="Buscar y agregar productos (mín. 3)"
             />
           </div>
           <PreciosProveedorPanel
@@ -692,7 +722,9 @@ export function ProductosPage() {
                     opciones={catalogoProductos.map((item) => ({ id: item.id, label: `${item.codigo} · ${item.nombre}` }))}
                     valores={reporteProductoIds}
                     onChange={setReporteProductoIds}
-                    placeholder="Filtrar productos"
+                    onBuscar={buscarProductosReporte}
+                    minCaracteres={MIN_BUSQUEDA}
+                    placeholder="Filtrar productos (mín. 3)"
                   />
                 </div>
                 <div>

@@ -62,6 +62,8 @@ interface BuscadorSelectProps {
   onBuscar?: (texto: string) => Promise<OpcionBuscador[]>;
   opcionFija?: OpcionBuscador | null;
   minCaracteres?: number;
+  resetKey?: number;
+  onTextoChange?: (texto: string) => void;
 }
 
 export function BuscadorSelect({
@@ -74,6 +76,8 @@ export function BuscadorSelect({
   onBuscar,
   opcionFija,
   minCaracteres = 0,
+  resetKey = 0,
+  onTextoChange,
 }: BuscadorSelectProps) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState("");
@@ -104,6 +108,13 @@ export function BuscadorSelect({
       setTexto("");
     }
   }, [abierto]);
+
+  useEffect(() => {
+    if (resetKey === 0) return;
+    setTexto("");
+    setAbierto(false);
+    setRemotos([]);
+  }, [resetKey]);
 
   useEffect(() => {
     if (valor == null) setSeleccionLocal(null);
@@ -172,7 +183,11 @@ export function BuscadorSelect({
             className="h-10 w-full border-b bg-transparent px-3 text-sm outline-none"
             placeholder={minCaracteres > 0 ? `Buscar (mín. ${minCaracteres})` : "Escribe para buscar"}
             value={texto}
-            onChange={(event) => setTexto(event.target.value)}
+            onChange={(event) => {
+              const valor = event.target.value;
+              setTexto(valor);
+              onTextoChange?.(valor);
+            }}
           />
           <ul className="max-h-48 overflow-y-auto py-1">
             {pendienteMinimo && (
@@ -213,20 +228,79 @@ interface BuscadorMultipleProps {
   valores: number[];
   onChange: (ids: number[]) => void;
   placeholder?: string;
+  onBuscar?: (texto: string) => Promise<OpcionBuscador[]>;
+  minCaracteres?: number;
 }
 
-export function BuscadorMultiple({ opciones, valores, onChange, placeholder }: BuscadorMultipleProps) {
+export function BuscadorMultiple({
+  opciones,
+  valores,
+  onChange,
+  placeholder,
+  onBuscar,
+  minCaracteres = 0,
+}: BuscadorMultipleProps) {
   const [texto, setTexto] = useState("");
+  const [remotos, setRemotos] = useState<OpcionBuscador[]>([]);
+  const [seleccionLocal, setSeleccionLocal] = useState<OpcionBuscador[]>([]);
+  const [cargando, setCargando] = useState(false);
+  const onBuscarRef = useRef(onBuscar);
+  onBuscarRef.current = onBuscar;
   const listaAbierta = texto.trim().length > 0;
   const contenedor = useCerrarAlClickFuera(listaAbierta, () => setTexto(""));
+  const pendienteMinimo = Boolean(onBuscar) && texto.trim().length < minCaracteres;
+
   const filtradas = useMemo(() => {
+    if (onBuscar) {
+      return remotos.filter((item) => !valores.includes(item.id));
+    }
     const termino = texto.trim().toLowerCase();
     return opciones
       .filter((item) => !valores.includes(item.id))
       .filter((item) => !termino || `${item.label} ${item.extra ?? ""}`.toLowerCase().includes(termino))
       .slice(0, 8);
-  }, [opciones, texto, valores]);
-  const seleccionadas = opciones.filter((item) => valores.includes(item.id));
+  }, [onBuscar, opciones, remotos, texto, valores]);
+
+  const seleccionadas = useMemo(() => {
+    return valores
+      .map((id) =>
+        opciones.find((item) => item.id === id)
+        ?? seleccionLocal.find((item) => item.id === id)
+        ?? remotos.find((item) => item.id === id)
+        ?? null,
+      )
+      .filter((item): item is OpcionBuscador => Boolean(item));
+  }, [opciones, remotos, seleccionLocal, valores]);
+
+  useEffect(() => {
+    setSeleccionLocal((prev) => prev.filter((item) => valores.includes(item.id)));
+  }, [valores]);
+
+  useEffect(() => {
+    if (!onBuscarRef.current) return;
+    if (texto.trim().length < minCaracteres) {
+      setRemotos([]);
+      setCargando(false);
+      return;
+    }
+    const buscar = onBuscarRef.current;
+    let cancelado = false;
+    const timer = setTimeout(async () => {
+      setCargando(true);
+      try {
+        const resultados = await buscar(texto);
+        if (!cancelado) setRemotos(resultados);
+      } catch {
+        if (!cancelado) setRemotos([]);
+      } finally {
+        if (!cancelado) setCargando(false);
+      }
+    }, 300);
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [minCaracteres, texto]);
 
   return (
     <div ref={contenedor} className="relative space-y-2">
@@ -236,19 +310,30 @@ export function BuscadorMultiple({ opciones, valores, onChange, placeholder }: B
         value={texto}
         onChange={(event) => setTexto(event.target.value)}
       />
-      {filtradas.length > 0 && listaAbierta && (
-        <ul className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-elegant">
-          {filtradas.map((item) => (
+      {listaAbierta && (
+        <ul className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-elegant max-h-48 overflow-y-auto">
+          {pendienteMinimo && (
+            <li className="px-3 py-2 text-sm text-muted-foreground">Escribe al menos {minCaracteres} caracteres</li>
+          )}
+          {!pendienteMinimo && cargando && (
+            <li className="px-3 py-2 text-sm text-muted-foreground">Buscando...</li>
+          )}
+          {!pendienteMinimo && !cargando && filtradas.length === 0 && (
+            <li className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</li>
+          )}
+          {!pendienteMinimo && filtradas.map((item) => (
             <li key={item.id}>
               <button
                 type="button"
                 className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10"
                 onClick={() => {
+                  setSeleccionLocal((prev) => [...prev.filter((sel) => sel.id !== item.id), item]);
                   onChange([...valores, item.id]);
                   setTexto("");
                 }}
               >
-                {item.label}
+                <span className="block font-medium">{item.label}</span>
+                {item.extra && <span className="block text-xs text-muted-foreground">{item.extra}</span>}
               </button>
             </li>
           ))}
