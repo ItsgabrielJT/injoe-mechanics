@@ -172,7 +172,7 @@ export function ClientesPage() {
               className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm text-primary hover:bg-primary/20"
             >
               <Car className="h-4 w-4" />
-              {cliente.totalVehiculos} {cliente.placas.slice(0, 2).join(", ")}
+              {cliente.totalVehiculos} {cliente.placas.join(", ")}
             </button>
           );
         },
@@ -239,7 +239,7 @@ export function ClientesPage() {
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por nombres, correo o cédula"
+          placeholder="Buscar por nombres, cédula, placa, marca o modelo"
           className="pl-10 w-full"
         />
       </div>

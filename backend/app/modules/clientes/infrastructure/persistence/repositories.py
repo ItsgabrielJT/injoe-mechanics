@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import String, cast, delete, func, or_, select
+from sqlalchemy import String, cast, delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.clientes.application.dto import ListarClientesQuery, ListarVehiculosQuery
@@ -128,14 +128,28 @@ class SqlAlchemyClienteRepository:
         query: ListarClientesQuery,
     ) -> tuple[list[Cliente], int]:
         stmt = select(ClienteModel).where(*self._alcance(empresa_id, punto_emision_id))
-        if query.search:
-            termino = f"%{query.search.strip()}%"
+        texto = (query.search or "").strip()
+        if texto:
+            termino = f"%{texto}%"
+            coincide_vehiculo = exists(
+                select(1).where(
+                    VehiculoModel.cliente_id == ClienteModel.id,
+                    VehiculoModel.empresa_id == empresa_id,
+                    VehiculoModel.punto_emision_id == punto_emision_id,
+                    or_(
+                        VehiculoModel.placa.ilike(termino),
+                        VehiculoModel.marca.ilike(termino),
+                        VehiculoModel.modelo.ilike(termino),
+                    ),
+                )
+            )
             stmt = stmt.where(
                 or_(
                     ClienteModel.nombres.ilike(termino),
                     ClienteModel.razon_social.ilike(termino),
                     ClienteModel.identificacion.ilike(termino),
                     cast(ClienteModel.correos, String).ilike(termino),
+                    coincide_vehiculo,
                 )
             )
         if query.tipo_cliente:
