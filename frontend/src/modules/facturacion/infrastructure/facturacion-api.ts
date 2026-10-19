@@ -182,17 +182,22 @@ export async function listarFacturas(token: string, params: FiltrosFactura = {})
   return { ...resp, data: resp.data.map(mapFactura), totales: mapTotales(resp.totales) };
 }
 
-export async function listarFacturasReporte(token: string, params: Omit<FiltrosFactura, "page" | "size"> = {}): Promise<Factura[]> {
+export async function listarFacturasReporte(
+  token: string,
+  params: Omit<FiltrosFactura, "page" | "size"> = {},
+): Promise<{ data: Factura[]; totales: TotalesFactura }> {
   const filas: Factura[] = [];
+  let totales: TotalesFactura | null = null;
   let page = 1;
   let pages = 1;
   while (page <= pages) {
     const resp = await listarFacturas(token, { ...params, page, size: 200 });
     filas.push(...resp.data);
+    totales ??= resp.totales;
     pages = resp.pages || 1;
     page += 1;
   }
-  return filas;
+  return { data: filas, totales: totales ?? mapTotales(null) };
 }
 
 export async function obtenerFactura(token: string, id: number): Promise<Factura> {

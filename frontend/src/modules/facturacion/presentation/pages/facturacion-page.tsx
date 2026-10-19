@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
-import { Ban, BarChart3, FileText, Loader2, Plus, Search, Send, Trash2 } from "lucide-react";
+import { Ban, BarChart3, FileSpreadsheet, FileText, Loader2, Plus, Search, Send, Trash2 } from "lucide-react";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import { listarBodegas, listarExistencias } from "@/modules/inventario/infrastructure/inventario-api";
 import type { Bodega, Existencia } from "@/modules/inventario/domain/entities";
@@ -28,6 +28,13 @@ import {
   obtenerFactura,
 } from "@/modules/facturacion/infrastructure/facturacion-api";
 import { ChipEstado } from "@/modules/facturacion/presentation/components/chip-estado";
+import {
+  FiltroPeriodo,
+  etiquetaPeriodo,
+  periodoInicial,
+  rangoPeriodo,
+  type Periodo,
+} from "@/modules/facturacion/presentation/components/filtro-periodo";
 import { FacturaFormDrawer } from "@/modules/facturacion/presentation/forms/factura-form-drawer";
 import { FacturaDetalleDialog } from "@/modules/facturacion/presentation/modals/factura-detalle-dialog";
 import { FacturacionEstadisticas } from "@/modules/facturacion/presentation/pages/facturacion-estadisticas";
@@ -44,6 +51,20 @@ function dinero(valor: number): string {
   return Number(valor ?? 0).toFixed(2);
 }
 
+interface DatosReporte {
+  facturas: Factura[];
+  totales: TotalesFactura;
+  empresa: string;
+  filtros: string;
+}
+
+function descargarArchivo(url: string, nombre: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  a.click();
+}
+
 export function FacturacionPage() {
   const { sesion, puntoActivo } = useSesionContext();
   const token = sesion?.accessToken ?? "";
@@ -56,6 +77,7 @@ export function FacturacionPage() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [estado, setEstado] = useState<"" | EstadoFactura>("");
+  const [periodo, setPeriodo] = useState<Periodo>(periodoInicial);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +90,8 @@ export function FacturacionPage() {
   const [detalle, setDetalle] = useState<Factura | null>(null);
   const [reporteUrl, setReporteUrl] = useState<string | null>(null);
   const [generandoReporte, setGenerandoReporte] = useState(false);
+  const [reporteDatos, setReporteDatos] = useState<DatosReporte | null>(null);
+  const [generandoExcel, setGenerandoExcel] = useState(false);
   const [formas, setFormas] = useState<FormaPago[]>([]);
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [existencias, setExistencias] = useState<Record<number, Existencia[]>>({});
@@ -92,7 +116,8 @@ export function FacturacionPage() {
   const filtros = useMemo(() => ({
     search: debounced || undefined,
     estado: estado || undefined,
-  }), [debounced, estado]);
+    ...rangoPeriodo(periodo),
+  }), [debounced, estado, periodo]);
 
   const cargar = useCallback(async (opciones?: { silencioso?: boolean }) => {
     if (!token) return;
@@ -278,20 +303,41 @@ export function FacturacionPage() {
   async function abrirReporte() {
     setGenerandoReporte(true);
     try {
-      const facturas = await listarFacturasReporte(token, filtros);
-      const { blobReporteFacturas } = await import("@/modules/facturacion/presentation/pdf/factura-reporte-pdf");
-      const blob = await blobReporteFacturas({
-        facturas,
-        totales,
+      const reporte = await listarFacturasReporte(token, filtros);
+      const datos: DatosReporte = {
+        facturas: reporte.data,
+        totales: reporte.totales,
         empresa: empresa.nombre,
-        filtros: [debounced && `Búsqueda: ${debounced}`, estado && `Estado: ${etiquetaEstado(estado)}`].filter(Boolean).join(" · ") || "Todas las facturas",
-      });
+        filtros: [
+          debounced && `Búsqueda: ${debounced}`,
+          estado && `Estado: ${etiquetaEstado(estado)}`,
+          etiquetaPeriodo(periodo),
+        ].filter(Boolean).join(" · ") || "Todas las facturas",
+      };
+      const { blobReporteFacturas } = await import("@/modules/facturacion/presentation/pdf/factura-reporte-pdf");
+      const blob = await blobReporteFacturas(datos);
       if (reporteUrl) URL.revokeObjectURL(reporteUrl);
+      setReporteDatos(datos);
       setReporteUrl(URL.createObjectURL(blob));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo generar el reporte");
     } finally {
       setGenerandoReporte(false);
+    }
+  }
+
+  async function descargarExcel() {
+    if (!reporteDatos) return;
+    setGenerandoExcel(true);
+    try {
+      const { blobReporteFacturasExcel } = await import("@/modules/facturacion/presentation/excel/factura-reporte-excel");
+      const url = URL.createObjectURL(await blobReporteFacturasExcel(reporteDatos));
+      descargarArchivo(url, "reporte-facturas.xlsx");
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo generar el Excel");
+    } finally {
+      setGenerandoExcel(false);
     }
   }
 
@@ -305,7 +351,7 @@ export function FacturacionPage() {
         {pestana === "facturas" && (
           <div className="flex gap-2">
             <Button variant="outline" disabled={generandoReporte} onClick={() => void abrirReporte()}>
-              <FileText className="mr-2 h-4 w-4" /> {generandoReporte ? "Generando..." : "Reporte PDF"}
+              <FileText className="mr-2 h-4 w-4" /> {generandoReporte ? "Generando..." : "Descargar reporte"}
             </Button>
             <Button onClick={() => { setEdicion(null); setDrawer(true); }}><Plus className="h-4 w-4 mr-2" /> Nueva factura</Button>
           </div>
@@ -328,7 +374,7 @@ export function FacturacionPage() {
         <FacturacionEstadisticas token={token} />
       ) : (
         <>
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <div className="relative w-full sm:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="Buscar número, cliente o cédula/RUC" className="pl-10" />
@@ -341,6 +387,7 @@ export function FacturacionPage() {
               <option value="RECHAZADA">Rechazada</option>
               <option value="CANCELADA">Cancelada</option>
             </select>
+            <FiltroPeriodo valor={periodo} onChange={(valor) => { setPeriodo(valor); setPage(0); }} />
           </div>
           <MuiDataTable
             rows={rows}
@@ -388,12 +435,10 @@ export function FacturacionPage() {
               <div className="flex items-center justify-between border-b px-5 py-3">
                 <h2 className="text-lg font-semibold">Reporte de facturas</h2>
                 <div className="flex gap-2">
-                  <Button onClick={() => {
-                    const a = document.createElement("a");
-                    a.href = reporteUrl;
-                    a.download = "reporte-facturas.pdf";
-                    a.click();
-                  }}>Descargar PDF</Button>
+                  <Button variant="outline" disabled={generandoExcel} onClick={() => void descargarExcel()}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> {generandoExcel ? "Generando..." : "Descargar Excel"}
+                  </Button>
+                  <Button onClick={() => descargarArchivo(reporteUrl, "reporte-facturas.pdf")}>Descargar PDF</Button>
                   <Button variant="outline" onClick={() => setReporteUrl(null)}>Cerrar</Button>
                 </div>
               </div>
