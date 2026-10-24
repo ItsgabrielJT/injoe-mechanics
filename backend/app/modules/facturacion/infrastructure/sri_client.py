@@ -72,6 +72,18 @@ async def _api_key(client: httpx.AsyncClient) -> str:
     return key
 
 
+async def _post_sri(client: httpx.AsyncClient, path: str, payload: dict[str, Any]) -> httpx.Response:
+    global _API_KEY
+    url = f"{settings.SRI_SIGN_URL.rstrip('/')}{path}"
+    resp = await client.post(url, json=payload, headers={"X-API-Key": await _api_key(client)})
+    if resp.status_code == 401:
+        # SriSignXml guarda las API keys en memoria: tras reiniciarse, la key cacheada deja de existir.
+        _API_KEY = None
+        resp = await client.post(url, json=payload, headers={"X-API-Key": await _api_key(client)})
+    resp.raise_for_status()
+    return resp
+
+
 def construir_payload(factura: Factura, empresa, punto, environment: str) -> dict[str, Any]:
     emision = factura.fecha_emision or datetime.now().date()
     estab = str(punto.codigo).zfill(3) if str(punto.codigo).isdigit() else str(punto.codigo)
@@ -174,14 +186,8 @@ async def firmar_factura(factura: Factura, empresa, punto) -> dict[str, Any]:
     )
     payload = construir_payload(factura, empresa, punto, environment)
     async with httpx.AsyncClient(timeout=90) as client:
-        key = await _api_key(client)
         try:
-            resp = await client.post(
-                f"{settings.SRI_SIGN_URL.rstrip('/')}/invoice/sign",
-                json=payload,
-                headers={"X-API-Key": key},
-            )
-            resp.raise_for_status()
+            resp = await _post_sri(client, "/invoice/sign", payload)
             return resp.json()
         except httpx.HTTPError as exc:
             return {
@@ -194,14 +200,8 @@ async def firmar_factura(factura: Factura, empresa, punto) -> dict[str, Any]:
 
 async def consultar_autorizacion(clave_acceso: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=60) as client:
-        key = await _api_key(client)
         try:
-            resp = await client.post(
-                f"{settings.SRI_SIGN_URL.rstrip('/')}/authorization/check",
-                json={"accessKey": clave_acceso},
-                headers={"X-API-Key": key},
-            )
-            resp.raise_for_status()
+            resp = await _post_sri(client, "/authorization/check", {"accessKey": clave_acceso})
             return resp.json()
         except httpx.HTTPError as exc:
             return {"result": None, "error": f"No se pudo consultar autorización: {exc}"}
@@ -209,14 +209,12 @@ async def consultar_autorizacion(clave_acceso: str) -> dict[str, Any]:
 
 async def recuperar_secuencial(empresa_sri_id: int, numero: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=60) as client:
-        key = await _api_key(client)
         try:
-            resp = await client.post(
-                f"{settings.SRI_SIGN_URL.rstrip('/')}/authorization/recover-sequential",
-                json={"empresa_id": int(empresa_sri_id), "numero_documento": numero},
-                headers={"X-API-Key": key},
+            resp = await _post_sri(
+                client,
+                "/authorization/recover-sequential",
+                {"empresa_id": int(empresa_sri_id), "numero_documento": numero},
             )
-            resp.raise_for_status()
             return resp.json()
         except httpx.HTTPError as exc:
             return {"result": None, "error": f"No se pudo recuperar el secuencial: {exc}"}

@@ -112,10 +112,19 @@ async function sriApiKey(): Promise<string> {
   return apiKeyCache as string;
 }
 
+async function sriFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const send = async () =>
+    fetch(`${env.sriSignUrl}${path}`, { ...init, headers: { ...init.headers, "X-API-Key": await sriApiKey() } });
+  const resp = await send();
+  if (resp.status !== 401) return resp;
+  // SriSignXml guarda las API keys en memoria: tras reiniciarse, la key cacheada deja de existir.
+  apiKeyCache = null;
+  return send();
+}
+
 export async function consultarCertificado(sriId: number): Promise<CertificadoInfo | null> {
   try {
-    const key = await sriApiKey();
-    const resp = await fetch(`${env.sriSignUrl}/v1/empresas/${sriId}`, { headers: { "X-API-Key": key } });
+    const resp = await sriFetch(`/v1/empresas/${sriId}`);
     if (!resp.ok) return null;
     const data = await resp.json();
     return {
@@ -133,17 +142,12 @@ export async function consultarCertificado(sriId: number): Promise<CertificadoIn
 }
 
 export async function subirCertificado(file: File, password: string, ruc: string, razonSocial: string): Promise<number> {
-  const key = await sriApiKey();
   const form = new FormData();
   form.append("certificate", file);
   form.append("password", password);
   form.append("ruc", ruc);
   form.append("razon_social", razonSocial);
-  const resp = await fetch(`${env.sriSignUrl}/empresas/certificado`, {
-    method: "POST",
-    headers: { "X-API-Key": key },
-    body: form,
-  });
+  const resp = await sriFetch("/empresas/certificado", { method: "POST", body: form });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     throw new Error(data.detail || data.error || "No se pudo subir el certificado");
