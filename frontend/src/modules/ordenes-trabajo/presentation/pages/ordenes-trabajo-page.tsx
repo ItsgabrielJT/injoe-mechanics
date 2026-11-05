@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GridColDef } from "@mui/x-data-grid";
 import { ClipboardList, ClipboardCheck, Download, Eye, FileText, Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
-import { crearCliente, listarClientes, obtenerCliente } from "@/modules/clientes/infrastructure/clientes-api";
+import { crearCliente, listarClientes, listarVehiculos, obtenerCliente } from "@/modules/clientes/infrastructure/clientes-api";
 import { obtenerEmpresa } from "@/modules/configuracion/infrastructure/configuracion-api";
-import type { Cliente } from "@/modules/clientes/domain/entities";
+import type { Cliente, Vehiculo } from "@/modules/clientes/domain/entities";
 import { crearDesdeOrden, listarFormasPago } from "@/modules/facturacion/infrastructure/facturacion-api";
 import type { FormaPago, TipoReceptor } from "@/modules/facturacion/domain/entities";
 import { useSesionContext } from "@/modules/acceso/presentation/state/sesion-context";
 import type { Bodega, CategoriaProducto } from "@/modules/inventario/domain/entities";
+import { BuscadorSelect, type OpcionBuscador } from "@/modules/inventario/presentation/components/buscador-select";
 import { listarBodegas, listarCategorias } from "@/modules/inventario/infrastructure/inventario-api";
 import { formatoMoneda, type EstadoOrden, type OrdenInput, type OrdenTrabajo, type Tecnico } from "@/modules/ordenes-trabajo/domain/entities";
 import { cerrarOrden, eliminarOrden, guardarOrden, listarOrdenes, listarTecnicos, obtenerOrden } from "@/modules/ordenes-trabajo/infrastructure/ordenes-api";
@@ -22,6 +23,63 @@ import { Portal } from "@/shared/components/portal";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { ApiError } from "@/shared/infrastructure/http/http-error";
+import { listarTodasLasPaginas } from "@/shared/lib/listar-todas-las-paginas";
+
+const MIN_BUSQUEDA_CLIENTE = 3;
+
+function unirExtra(...partes: Array<string | null | undefined>): string {
+  const vistos = new Set<string>();
+  const unicos: string[] = [];
+  for (const parte of partes) {
+    const valor = parte?.trim();
+    if (!valor) continue;
+    const clave = valor.toLowerCase();
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    unicos.push(valor);
+  }
+  return unicos.join(" · ");
+}
+
+function opcionDesdeCliente(cliente: Cliente): OpcionBuscador {
+  return {
+    id: cliente.id,
+    label: cliente.nombres,
+    extra: unirExtra(cliente.identificacion, ...cliente.placas),
+  };
+}
+
+function opcionDesdeVehiculo(vehiculo: Vehiculo): OpcionBuscador {
+  return {
+    id: vehiculo.clienteId,
+    label: vehiculo.clienteNombres || "Cliente",
+    extra: unirExtra(
+      vehiculo.clienteIdentificacion,
+      vehiculo.placa,
+      [vehiculo.marca, vehiculo.modelo].filter(Boolean).join(" "),
+    ),
+  };
+}
+
+function fusionarOpcionesCliente(clientes: Cliente[], vehiculos: Vehiculo[]): OpcionBuscador[] {
+  const opciones = new Map<number, OpcionBuscador>();
+  for (const cliente of clientes) {
+    opciones.set(cliente.id, opcionDesdeCliente(cliente));
+  }
+  for (const vehiculo of vehiculos) {
+    const actual = opciones.get(vehiculo.clienteId);
+    const desdeVehiculo = opcionDesdeVehiculo(vehiculo);
+    if (!actual) {
+      opciones.set(vehiculo.clienteId, desdeVehiculo);
+      continue;
+    }
+    opciones.set(vehiculo.clienteId, {
+      ...actual,
+      extra: unirExtra(actual.extra, desdeVehiculo.extra),
+    });
+  }
+  return [...opciones.values()];
+}
 
 function fechaCorta(valor?: string | null): string {
   if (!valor) return "—";
@@ -59,7 +117,6 @@ export function OrdenesTrabajoPage() {
   const [receptor, setReceptor] = useState<"cf" | "ot" | "otro">("ot");
   const [otroClienteId, setOtroClienteId] = useState<number | null>(null);
   const [nuevoCliente, setNuevoCliente] = useState({ identificacion: "", nombres: "", correo: "" });
-  const [clientesFactura, setClientesFactura] = useState<Cliente[]>([]);
   const [formasPago, setFormasPago] = useState<FormaPago[]>([]);
   const [empresa, setEmpresa] = useState<DatosTallerPdf>({ nombre: "", telefono: "", direccion: "", logoUrl: null });
 
@@ -126,11 +183,7 @@ export function OrdenesTrabajoPage() {
   async function abrirFacturar(row: OrdenTrabajo) {
     try {
       const completa = await obtenerOrden(token, row.id);
-      const [cli, fps] = await Promise.all([
-        listarClientes(token, { page: 1, size: 100 }),
-        listarFormasPago(token),
-      ]);
-      setClientesFactura(cli.data);
+      const fps = await listarFormasPago(token);
       setFormasPago(fps);
       setReceptor("ot");
       setOtroClienteId(null);
@@ -140,6 +193,16 @@ export function OrdenesTrabajoPage() {
       setError(err instanceof ApiError ? err.message : "No se pudo preparar la factura");
     }
   }
+
+  const buscarClientesFactura = useCallback(async (texto: string): Promise<OpcionBuscador[]> => {
+    const termino = texto.trim();
+    if (!token || termino.length < MIN_BUSQUEDA_CLIENTE) return [];
+    const [clientes, vehiculos] = await Promise.all([
+      listarTodasLasPaginas((page, size) => listarClientes(token, { page, size, search: termino })),
+      listarTodasLasPaginas((page, size) => listarVehiculos(token, { page, size, search: termino })),
+    ]);
+    return fusionarOpcionesCliente(clientes, vehiculos);
+  }, [token]);
 
   async function confirmarFactura() {
     if (!facturar) return;
@@ -405,17 +468,22 @@ export function OrdenesTrabajoPage() {
         <Portal>
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={() => setFacturar(null)} />
-            <div className="relative w-full max-w-lg rounded-2xl bg-card p-6 space-y-4">
+            <div className="relative w-full max-w-lg overflow-visible rounded-2xl bg-card p-6 space-y-4">
               <h2 className="text-lg font-semibold">¿A nombre de quién desea facturar?</h2>
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={receptor === "cf"} onChange={() => setReceptor("cf")} /> Consumidor Final</label>
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={receptor === "ot"} onChange={() => setReceptor("ot")} /> {facturar.clienteNombres}{facturar.clienteIdentificacion ? ` - CI ${facturar.clienteIdentificacion}` : ""}</label>
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={receptor === "otro"} onChange={() => setReceptor("otro")} /> Otro cliente / empresa</label>
               {receptor === "otro" && (
                 <div className="space-y-2">
-                  <select className="flex h-10 w-full rounded-md border px-3 text-sm bg-background" value={otroClienteId ?? ""} onChange={(e) => setOtroClienteId(e.target.value ? Number(e.target.value) : null)}>
-                    <option value="">Seleccionar existente</option>
-                    {clientesFactura.map((c) => <option key={c.id} value={c.id}>{c.nombres} {c.identificacion ?? ""}</option>)}
-                  </select>
+                  <BuscadorSelect
+                    opciones={[]}
+                    valor={otroClienteId}
+                    onChange={setOtroClienteId}
+                    onBuscar={buscarClientesFactura}
+                    minCaracteres={MIN_BUSQUEDA_CLIENTE}
+                    resetKey={facturar.id}
+                    placeholder="Mín. 3: nombre, cédula o placa"
+                  />
                   {!otroClienteId && (
                     <div className="grid gap-2">
                       <Input placeholder="Cédula / RUC" value={nuevoCliente.identificacion} onChange={(e) => setNuevoCliente({ ...nuevoCliente, identificacion: e.target.value })} />
