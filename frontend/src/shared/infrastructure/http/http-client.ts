@@ -41,7 +41,7 @@ async function parsear<T>(response: Response): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
-  const data = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({})) as Record<string, any>;
   if (!response.ok) {
     const detalle = typeof data.detail === "string"
       ? data.detail

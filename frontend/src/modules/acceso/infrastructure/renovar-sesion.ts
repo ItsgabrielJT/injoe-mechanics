@@ -24,9 +24,11 @@ async function solicitarRefresh(refreshToken: string): Promise<Sesion> {
     throw new ApiError(0, "Error de conexión. Por favor, verifica tu conexión a internet");
   }
 
-  const data = await response.json().catch(() => ({}));
+  const data: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detalle = typeof data.detail === "string" ? data.detail : "Token inválido o expirado";
+    const detalle = typeof (data as { detail?: unknown }).detail === "string"
+      ? (data as { detail: string }).detail
+      : "Token inválido o expirado";
     throw new ApiError(response.status, detalle);
   }
   return persistirSesion(mapSesion(data as SesionApiDto));

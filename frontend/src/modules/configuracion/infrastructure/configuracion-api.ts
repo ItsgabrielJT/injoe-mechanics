@@ -107,7 +107,7 @@ async function sriApiKey(): Promise<string> {
     body: JSON.stringify({ secret_key: env.sriSignSecret, expiration: "never" }),
   });
   if (!resp.ok) throw new Error("No se pudo generar la API key de SriSignXml");
-  const data = await resp.json();
+  const data = await resp.json() as Record<string, any>;
   apiKeyCache = data.api_key;
   return apiKeyCache as string;
 }
@@ -126,7 +126,7 @@ export async function consultarCertificado(sriId: number): Promise<CertificadoIn
   try {
     const resp = await sriFetch(`/v1/empresas/${sriId}`);
     if (!resp.ok) return null;
-    const data = await resp.json();
+    const data = await resp.json() as Record<string, any>;
     return {
       id: data.id,
       ruc: data.ruc,
@@ -148,7 +148,7 @@ export async function subirCertificado(file: File, password: string, ruc: string
   form.append("ruc", ruc);
   form.append("razon_social", razonSocial);
   const resp = await sriFetch("/empresas/certificado", { method: "POST", body: form });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as Record<string, any>;
   if (!resp.ok) {
     throw new Error(data.detail || data.error || "No se pudo subir el certificado");
   }
